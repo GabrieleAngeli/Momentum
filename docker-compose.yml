@@ -13,7 +13,7 @@ services:
     depends_on:
       - zookeeper
   zookeeper:
-    image: bitnami/zookeeper:3.9
+    image: bitnami/zookeeper:3.9.1
     environment:
       - ALLOW_ANONYMOUS_LOGIN=yes
     ports:
