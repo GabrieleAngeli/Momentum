@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option csharp_namespace = "Identifier.Authentication.V1";
+
+package identifier.authentication.v1;
+
+service Authenticator {
+  rpc Authenticate (AuthenticateRequest) returns (AuthenticateReply);
+}
+
+message AuthenticateRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message AuthenticateReply {
+  string user_id = 1;
+  string display_name = 2;
+  string jwt = 3;
+  repeated string roles = 4;
+}

@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'identifier'
+    static_configs:
+      - targets: ['identifier-api:8080']
+  - job_name: 'streamer'
+    static_configs:
+      - targets: ['streamer-api:8080']
+  - job_name: 'notifier'
+    static_configs:
+      - targets: ['notifier-api:8080']
+  - job_name: 'web-backend-core'
+    static_configs:
+      - targets: ['web-backend-core:8080']
