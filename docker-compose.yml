@@ -1,7 +1,7 @@
 version: '3.9'
 services:
   kafka:
-    image: bitnami/kafka:3.6
+    image: bitnami/kafka:3.6-debian-12
     environment:
       - KAFKA_BROKER_ID=1
       - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
@@ -13,13 +13,13 @@ services:
     depends_on:
       - zookeeper
   zookeeper:
-    image: bitnami/zookeeper:3.9.1
+    image: bitnami/zookeeper:3.9.1-debian-12
     environment:
       - ALLOW_ANONYMOUS_LOGIN=yes
     ports:
       - "2181:2181"
   timescale:
-    image: timescale/timescaledb:2.14.0-pg16
+    image: timescale/timescaledb-ha:pg16.3-ts2.15.0-oss
     environment:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_USER=postgres
@@ -38,7 +38,7 @@ services:
     ports:
       - "9090:9090"
   grafana:
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana-oss:10.4.0
     ports:
       - "3000:3000"
   loki:
