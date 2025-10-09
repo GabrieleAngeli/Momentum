@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://momentum.dev/schemas/telemetry-ingested.json",
+  "title": "TelemetryIngested",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "source": { "type": "string" },
+    "type": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "value": { "type": "number" },
+    "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+  },
+  "required": ["id", "source", "type", "timestamp", "value"],
+  "additionalProperties": false
+}

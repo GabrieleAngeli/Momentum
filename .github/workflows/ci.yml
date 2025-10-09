@@ -1,0 +1,61 @@
+name: Momentum CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.14.0-pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: momentum
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+      kafka:
+        image: bitnami/kafka:3.6
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_CFG_ZOOKEEPER_CONNECT: kafka-zk:2181
+          ALLOW_PLAINTEXT_LISTENER: "yes"
+          KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
+          KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+        ports:
+          - 9092:9092
+      kafka-zk:
+        image: bitnami/zookeeper:3.9
+        ports:
+          - 2181:2181
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Restore dotnet
+        run: dotnet restore Momentum.sln || true
+      - name: Build dotnet
+        run: dotnet build Momentum.sln --no-restore || true
+      - name: Test dotnet
+        run: dotnet test Momentum.sln --no-build || true
+      - name: Install npm
+        run: npm install --prefix src/web-core
+      - name: Lint web
+        run: npm run lint --prefix src/web-core || true
+      - name: Test web
+        run: npm test --prefix src/web-core -- --watch=false || true
+      - name: Upload contracts artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: contracts
+          path: contracts

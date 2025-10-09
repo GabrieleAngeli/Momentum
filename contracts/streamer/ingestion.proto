@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option csharp_namespace = "Streamer.Ingestion.V1";
+
+package streamer.ingestion.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service StreamIngestor {
+  rpc Ingest (IngestRequest) returns (IngestReply);
+}
+
+message IngestRequest {
+  string source = 1;
+  string type = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  double value = 4;
+  map<string, string> metadata = 5;
+}
+
+message IngestReply {
+  bool accepted = 1;
+}
