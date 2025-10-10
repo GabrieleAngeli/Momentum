@@ -6,6 +6,13 @@ if [ -d /home/vscode/.aspnet/https ]; then
   sudo chown -R vscode:vscode /home/vscode/.aspnet/https || true
 fi
 
+if [ -d /home/vscode/.aspnet/https-windows ]; then
+  sudo chown -R vscode:vscode /home/vscode/.aspnet/https-windows || true
+fi
+
+# Guarantee HTTPS dev certificates exist after every start
+bash "$(dirname "$0")/setup-https-certs.sh"
+
 # Display quick usage summary
 cat <<'MSG'
 Momentum devcontainer ready.
