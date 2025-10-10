@@ -75,3 +75,4 @@ jobs:
             git push
           else
             echo "Nessun file di release note generato"
+          fi
