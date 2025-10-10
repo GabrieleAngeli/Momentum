@@ -1,0 +1,96 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "Momentum Platform",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "VARIANT": "8.0-bookworm-slim"
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20",
+      "pnpmVersion": "none",
+      "installYarnUsingApt": false
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "version": "latest"
+    }
+  },
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "DOTNET_NOLOGO": "1"
+  },
+  "forwardPorts": [4200, 5000, 5001, 9090],
+  "portsAttributes": {
+    "4200": {
+      "label": "Angular dev server"
+    },
+    "5000": {
+      "label": "Backend HTTP"
+    },
+    "5001": {
+      "label": "Backend HTTPS"
+    },
+    "9090": {
+      "label": "Observability / Grafana"
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
+  "mounts": [
+    "source=${localEnv:HOME}/.aspnet/https,target=/home/vscode/.aspnet/https,type=bind"
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "dotnet.defaultSolution": "Momentum.sln",
+        "editor.formatOnSave": true,
+        "files.trimTrailingWhitespace": true,
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        }
+      },
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "angular.ng-template",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "ms-azuretools.vscode-docker"
+      ],
+      "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+          {
+            "label": "Build (make)",
+            "type": "shell",
+            "command": "make build",
+            "group": "build",
+            "problemMatcher": []
+          },
+          {
+            "label": "Test (make)",
+            "type": "shell",
+            "command": "make test",
+            "group": "test",
+            "problemMatcher": []
+          },
+          {
+            "label": "Security scan",
+            "type": "shell",
+            "command": "dotnet list Momentum.sln package --vulnerable --include-transitive && npm audit --prefix src/web-core",
+            "problemMatcher": []
+          },
+          {
+            "label": "Angular lint",
+            "type": "shell",
+            "command": "npm run lint --prefix src/web-core",
+            "problemMatcher": []
+          }
+        ]
+      }
+    }
+  }
+}
