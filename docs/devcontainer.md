@@ -24,8 +24,9 @@ La configurazione del Dev Container permette di avere un ambiente riproducibile 
 
 - `.devcontainer/scripts/post-create.sh` – provisioning iniziale (restore pacchetti, setup Playwright).
 - `.devcontainer/scripts/post-start.sh` – normalizza permessi certificati HTTPS e mostra i comandi principali.
+- `.devcontainer/scripts/setup-https-certs.sh` – crea in modo idempotente i certificati HTTPS di sviluppo se mancanti.
 
 ## Note
 
-- I certificati di sviluppo HTTPS sono montati dalla macchina host in `/home/vscode/.aspnet/https` per mantenere la compatibilità con ASP.NET.
+- I certificati di sviluppo HTTPS sono montati dalla macchina host in `/home/vscode/.aspnet/https` per mantenere la compatibilità con ASP.NET. Su Windows viene montata anche la cartella `%USERPROFILE%\.aspnet\https` e resa disponibile nel container.
 - Per aggiornare Playwright o installare browser aggiuntivi eseguire `npx playwright install --with-deps` all'interno del container.

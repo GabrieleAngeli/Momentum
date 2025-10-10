@@ -15,3 +15,6 @@ fi
 if [ -d tests ]; then
   npx --yes playwright install --with-deps || true
 fi
+
+# Ensure development HTTPS certificates are available for ASP.NET services
+bash "$(dirname "$0")/setup-https-certs.sh"
