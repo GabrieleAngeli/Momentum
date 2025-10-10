@@ -41,7 +41,16 @@
   "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
   "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
   "mounts": [
-    "source=${localEnv:HOME}/.aspnet/https,target=/home/vscode/.aspnet/https,type=bind"
+    {
+      "type": "bind",
+      "source": "${localEnv:HOME}/.aspnet/https",
+      "target": "/home/vscode/.aspnet/https"
+    },
+    {
+      "type": "bind",
+      "source": "${localEnv:USERPROFILE}\\.aspnet\\https",
+      "target": "/home/vscode/.aspnet/https-windows"
+    }
   ],
   "customizations": {
     "vscode": {
