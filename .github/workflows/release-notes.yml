@@ -1,0 +1,64 @@
+name: Generate release notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Versione da utilizzare per il file di release note'
+        required: true
+        type: string
+      base_ref:
+        description: 'Commit o tag di partenza (esclusivo) da cui generare le note'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r tools/release_notes/requirements.txt
+
+      - name: Generate release notes files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE_REF="${{ inputs.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            BASE_REF=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          fi
+          python tools/release_notes/generate_release_notes.py \
+            --release-version "${{ inputs.release_version }}" \
+            --base-ref "$BASE_REF" \
+            --head-ref "${{ github.sha }}" \
+            --repo "${{ github.repository }}" \
+            --github-token "$GITHUB_TOKEN"
+
+      - name: Commit release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add ReleaseNotes || true
+            git add modules/*/ReleaseNotes 2>/dev/null || true
+            git commit -m "chore: add release notes for ${{ inputs.release_version }}"
+            git push
+          else
+            echo "Nessun file di release note generato"

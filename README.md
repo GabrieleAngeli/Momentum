@@ -70,3 +70,9 @@ Il repository include una configurazione [Dev Container](https://containers.dev/
 - [Architecture Overview](architecture-overview.md)
 - Cartella `docs/` per policy e ADR
 - Cartella `contracts/` per proto/OpenAPI/event schema
+
+## Automazioni di processo
+
+- **Ensure issue linking**: workflow che garantisce che ogni commit sia collegato a una issue. In assenza del riferimento genera automaticamente un ticket riassumendo le modifiche e aggiorna la descrizione della pull request.
+- **Generate release notes**: workflow manuale che produce i file di release note per repository e moduli, collocandoli nelle cartelle `ReleaseNotes/` con il numero di versione fornito.
+
