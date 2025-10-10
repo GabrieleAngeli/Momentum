@@ -50,3 +50,44 @@ jobs:
         with:
           name: contracts
           path: contracts
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Restore dotnet dependencies
+        run: dotnet restore Momentum.sln
+      - name: Check .NET packages for vulnerabilities
+        run: dotnet list Momentum.sln package --vulnerable --include-transitive
+      - name: Install npm dependencies
+        run: npm install --prefix src/web-core
+      - name: Audit npm dependencies
+        run: npm audit --prefix src/web-core --audit-level=high
+      - name: Cache OWASP Dependency Check data
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: ${{ runner.os }}-dependency-check-${{ hashFiles('**/package-lock.json', '**/packages.lock.json', '**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-dependency-check-
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@v4.1.0
+        with:
+          project: Momentum
+          path: .
+          format: HTML
+          out: reports
+          args: >-
+            --failOnCVSS 7
+      - name: Upload dependency check report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports
