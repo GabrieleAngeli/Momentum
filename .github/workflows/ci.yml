@@ -28,13 +28,6 @@ jobs:
         options: >-
           --health-cmd="bash -c 'rpk cluster info -X brokers=localhost:9092 || exit 1'"
           --health-interval=5s --health-timeout=3s --health-retries=60
-        command: >
-          redpanda start --overprovisioned --smp 1 --memory 1G
-          --reserve-memory 0M --node-id 0 --check=false
-          --kafka-addr PLAINTEXT://0.0.0.0:9092
-          --advertise-kafka-addr PLAINTEXT://localhost:9092
-        ports:
-          - 9092:9092
       kafka-zk:
         image: bitnami/zookeeper:3.9
         ports:
