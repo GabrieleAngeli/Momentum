@@ -26,6 +26,15 @@ Oppure con Aspire:
 dotnet run --project src/AppHost/Momentum.AppHost.csproj
 ```
 
+## Devcontainer
+
+Il repository include una configurazione [Dev Container](https://containers.dev/) pronta all'uso nella cartella `.devcontainer/`. Consente di avere un ambiente di sviluppo coerente per build, test e controlli di sicurezza.
+
+1. Apri la cartella del progetto con VS Code e scegli `Reopen in Container`.
+2. Al termine del provisioning verranno ripristinati automaticamente i pacchetti .NET e Angular.
+3. Sono già disponibili i task `Build (make)`, `Test (make)` e `Security scan` per eseguire rapidamente build, test e audit dipendenze.
+4. Le porte principali (4200, 5000, 5001, 9090) vengono esposte automaticamente verso l'host.
+
 ## Servizi
 
 | Servizio | Descrizione |
