@@ -52,9 +52,27 @@ def run_git(args: Sequence[str], cwd: Optional[Path] = None) -> str:
     return result.stdout.strip()
 
 
+def _ref_exists(ref: str) -> bool:
+    try:
+        run_git(["rev-parse", "--verify", f"{ref}^{{commit}}"])
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
 def determine_commits(base_ref: str, head_ref: str) -> List[str]:
     if base_ref:
-        range_spec = f"{base_ref}..{head_ref}"
+        if not _ref_exists(base_ref):
+            print(
+                (
+                    "Riferimento di base "
+                    f"'{base_ref}' inesistente, considero tutti i commit fino a {head_ref}."
+                ),
+                file=sys.stderr,
+            )
+            range_spec = head_ref
+        else:
+            range_spec = f"{base_ref}..{head_ref}"
     else:
         range_spec = head_ref
     output = run_git(["rev-list", range_spec])
