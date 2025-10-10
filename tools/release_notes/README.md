@@ -23,3 +23,23 @@ Installare le dipendenze Python con:
 pip install -r tools/release_notes/requirements.txt
 ```
 
+## Creazione automatica della release
+
+Lo script `tools/release_notes/create_release.py` automatizza l'intero flusso:
+
+1. Determina il prossimo numero di versione seguendo la policy semantica analizzando i commit
+   dall'ultimo tag.
+2. Genera i file di release notes arricchiti con i titoli delle issue di GitHub.
+3. Crea un commit `chore: release <version>` con i file prodotti.
+4. Applica il tag `v<version>` su `main` e crea il branch `release/v<version>`.
+
+Esempio di esecuzione:
+
+```bash
+python -m tools.release_notes.create_release \
+  --repo <owner>/<repository> \
+  --github-token $GITHUB_TOKEN
+```
+
+È necessario che il working tree sia pulito e che il comando venga lanciato dal branch `main`.
+
