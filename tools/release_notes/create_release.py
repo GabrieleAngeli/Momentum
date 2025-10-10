@@ -8,9 +8,6 @@ import sys
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
-import os
-from subprocess import CalledProcessError
-
 from tools.release_notes.generate_release_notes import (
     determine_commits,
     fetch_issue_titles,
@@ -36,38 +33,11 @@ def ensure_clean_worktree(repository_root: Path) -> None:
 
 
 def ensure_on_main(repository_root: Path, expected_branch: str = "main") -> None:
-    """Verifica che la release venga generata da ``expected_branch``.
-
-    In CI (es. GitHub Actions) il checkout avviene spesso in modalità detached HEAD,
-    quindi ``git rev-parse --abbrev-ref HEAD`` restituisce ``HEAD`` anziché il nome
-    del branch. In questo caso confrontiamo l'hash di ``HEAD`` con quello del branch
-    atteso (locale o remoto) prima di fallire.
-    """
-
-    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repository_root).strip()
-    if branch == expected_branch:
-        return
-
-    head_sha = run_git(["rev-parse", "HEAD"], cwd=repository_root).strip()
-    candidate_refs = [expected_branch, f"origin/{expected_branch}"]
-
-    # Alcuni workflow (es. checkout@v3) esportano anche GITHUB_REF.
-    github_ref = os.environ.get("GITHUB_REF")
-    if github_ref and github_ref.startswith("refs/heads/"):
-        candidate_refs.insert(0, github_ref.replace("refs/heads/", ""))
-
-    for ref in candidate_refs:
-        try:
-            ref_sha = run_git(["rev-parse", ref], cwd=repository_root).strip()
-        except CalledProcessError:
-            continue
-        if ref_sha == head_sha:
-            return
-
-    raise RuntimeError(
-        "La release deve essere creata partendo da "
-        f"{expected_branch}, branch corrente: {branch}."
-    )
+    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repository_root)
+    if branch.strip() != expected_branch:
+        raise RuntimeError(
+            f"La release deve essere creata partendo da {expected_branch}, branch corrente: {branch.strip()}."
+        )
 
 
 def generate_release_notes(

@@ -42,7 +42,4 @@ python -m tools.release_notes.create_release \
 ```
 
 È necessario che il working tree sia pulito e che il comando venga lanciato dal branch `main`.
-In ambiente CI (ad esempio GitHub Actions) il checkout avviene in detached HEAD: lo script
-verifica automaticamente che la commit corrente coincida con `main` e prosegue senza errori,
-creando il tag `v<version>` e il branch `release/v<version>` dopo aver committato le note.
 
