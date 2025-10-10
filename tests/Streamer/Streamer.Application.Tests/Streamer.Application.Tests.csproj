@@ -10,7 +10,7 @@
     <PackageReference Include="Moq" Version="4.20.69" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/services/streamer/Streamer.Application/Streamer.Application.csproj" />
-    <ProjectReference Include="../../src/services/streamer/Streamer.Domain/Streamer.Domain.csproj" />
+    <ProjectReference Include="../../../src/services/streamer/Streamer.Application/Streamer.Application.csproj" />
+    <ProjectReference Include="../../../src/services/streamer/Streamer.Domain/Streamer.Domain.csproj" />
   </ItemGroup>
 </Project>

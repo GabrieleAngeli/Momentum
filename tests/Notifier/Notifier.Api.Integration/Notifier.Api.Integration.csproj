@@ -9,6 +9,6 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/services/notifier/Notifier.Api/Notifier.Api.csproj" />
+    <ProjectReference Include="../../../src/services/notifier/Notifier.Api/Notifier.Api.csproj" />
   </ItemGroup>
 </Project>
