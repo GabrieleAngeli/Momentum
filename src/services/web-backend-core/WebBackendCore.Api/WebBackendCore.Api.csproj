@@ -5,12 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Dapr.AspNetCore" Version="1.13.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.8.1" />
-    <PackageReference Include="Aspire.Microsoft.AspNetCore.Hosting" Version="8.0.0-preview.5.23620.2" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
-    <PackageReference Include="OpenFeature" Version="1.8.0" />
-    <PackageReference Include="OpenFeature.Contrib.Providers.Memory" Version="1.2.0" />
+    <PackageReference Include="Dapr.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="Aspire.Microsoft.AspNetCore.Hosting" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="OpenFeature" />
+    <PackageReference Include="OpenFeature.Contrib.Providers.Memory" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../WebBackendCore.Application/WebBackendCore.Application.csproj" />
