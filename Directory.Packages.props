@@ -3,14 +3,39 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="OpenTelemetry" Version="1.8.0" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.8.0" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.8.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.8.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Otlp" Version="1.8.0" />
+    <PackageVersion Include="Apache.Ignite" Version="2.16.0" />
+    <PackageVersion Include="Aspire.Hosting" Version="8.0.0-preview.5.23620.2" />
+    <PackageVersion Include="Aspire.Hosting.Dapr" Version="8.0.0-preview.5.23620.2" />
+    <PackageVersion Include="Aspire.Hosting.Kafka" Version="8.0.0-preview.5.23620.2" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="8.0.0-preview.5.23620.2" />
+    <PackageVersion Include="Aspire.Microsoft.AspNetCore.Hosting" Version="8.0.0-preview.5.23620.2" />
+    <PackageVersion Include="Azure.Communication.Email" Version="1.1.0" />
+    <PackageVersion Include="Confluent.Kafka" Version="2.4.0" />
+    <PackageVersion Include="Dapr.AspNetCore" Version="1.13.0" />
+    <PackageVersion Include="Dapr.Client" Version="1.13.0" />
+    <PackageVersion Include="Grpc.AspNetCore" Version="2.57.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageVersion Include="Moq" Version="4.20.69" />
+    <PackageVersion Include="Npgsql" Version="8.0.3" />
+    <PackageVersion Include="OpenFeature" Version="1.8.0" />
+    <PackageVersion Include="OpenFeature.Contrib.Providers.Memory" Version="1.2.0" />
+    <PackageVersion Include="OpenTelemetry" Version="1.8.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Otlp" Version="1.8.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.8.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.8.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.8.1" />
     <PackageVersion Include="Serilog.AspNetCore" Version="8.0.1" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="5.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="7.2.0" />
+    <PackageVersion Include="xunit" Version="2.6.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
 </Project>

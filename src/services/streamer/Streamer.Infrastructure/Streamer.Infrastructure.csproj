@@ -5,11 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Confluent.Kafka" Version="2.4.0" />
-    <PackageReference Include="Npgsql" Version="8.0.3" />
-    <PackageReference Include="Apache.Ignite" Version="2.16.0" />
-    <PackageReference Include="Dapr.Client" Version="1.13.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.8.1" />
+    <PackageReference Include="Confluent.Kafka" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Apache.Ignite" />
+    <PackageReference Include="Dapr.Client" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Streamer.Application/Streamer.Application.csproj" />

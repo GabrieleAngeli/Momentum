@@ -5,12 +5,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Dapr.Client" Version="1.13.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.8.1" />
-    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.8.1" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.2.0" />
+    <PackageReference Include="Dapr.Client" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Identifier.Application/Identifier.Application.csproj" />
