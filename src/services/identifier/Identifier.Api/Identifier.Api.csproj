@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore" Version="2.57.0" />
+    <PackageReference Include="Dapr.AspNetCore" Version="1.13.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Protobuf Include="../../../../contracts/identifier/authentication.proto" GrpcServices="Server" Link="Protos/authentication.proto" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Identifier.Application/Identifier.Application.csproj" />
+    <ProjectReference Include="../Identifier.Infrastructure/Identifier.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

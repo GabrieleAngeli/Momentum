@@ -1,0 +1,20 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+COPY Momentum.sln ./
+COPY Directory.Packages.props ./
+COPY NuGet.config ./
+COPY src/services/notifier/Notifier.Domain/Notifier.Domain.csproj src/services/notifier/Notifier.Domain/
+COPY src/services/notifier/Notifier.Application/Notifier.Application.csproj src/services/notifier/Notifier.Application/
+COPY src/services/notifier/Notifier.Infrastructure/Notifier.Infrastructure.csproj src/services/notifier/Notifier.Infrastructure/
+COPY src/services/notifier/Notifier.Api/Notifier.Api.csproj src/services/notifier/Notifier.Api/
+RUN dotnet restore src/services/notifier/Notifier.Api/Notifier.Api.csproj
+
+COPY . .
+RUN dotnet publish src/services/notifier/Notifier.Api/Notifier.Api.csproj -c Release -o /app/out /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+EXPOSE 8080
+COPY --from=build /app/out .
+ENTRYPOINT ["dotnet", "Notifier.Api.dll"]

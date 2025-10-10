@@ -1,0 +1,120 @@
+services:
+  kafka:
+    image: redpandadata/redpanda:v24.1.11
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --memory
+      - "1G"
+      - --overprovisioned
+      - --set
+      - redpanda.enable_rack_awareness=false
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster metadata --brokers localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  timescale:
+    image: timescale/timescaledb-ha:pg16.3-ts2.15.0-oss
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=momentum
+    ports:
+      - "5432:5432"
+
+  ignite:
+    image: apacheignite/ignite:2.16.0
+    ports:
+      - "10800:10800"
+      - "11211:11211"
+
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana-oss:10.4.0
+    ports:
+      - "3000:3000"
+
+  loki:
+    image: grafana/loki:3.0.0
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:2.4.0
+    ports:
+      - "3200:3200"
+
+  identifier-api:
+    build:
+      context: .
+      dockerfile: src/services/identifier/Identifier.Api/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "8082:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  streamer-api:
+    build:
+      context: .
+      dockerfile: src/services/streamer/Streamer.Api/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__Timescale=Host=timescale;Username=postgres;Password=postgres;Database=momentum
+    ports:
+      - "8081:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescale:
+        condition: service_started
+
+  notifier-api:
+    build:
+      context: .
+      dockerfile: src/services/notifier/Notifier.Api/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "8083:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  web-backend-core:
+    build:
+      context: .
+      dockerfile: src/services/web-backend-core/WebBackendCore.Api/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "5004:8080"
+    depends_on:
+      notifier-api:
+        condition: service_started
+
+  web-core:
+    build:
+      context: .
+      dockerfile: src/web-core/Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      web-backend-core:
+        condition: service_started

@@ -1,0 +1,17 @@
+openapi: 3.1.0
+info:
+  title: Web Backend Core Orchestrator API
+  version: 1.0.0
+paths:
+  /api/orchestrator/notifications:
+    post:
+      summary: Broadcast a notification payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '202':
+          description: Accepted

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting" Version="8.0.0-preview.5.23620.2" />
+    <PackageReference Include="Aspire.Hosting.Dapr" Version="8.0.0-preview.5.23620.2" />
+    <PackageReference Include="Aspire.Hosting.Kafka" Version="8.0.0-preview.5.23620.2" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="8.0.0-preview.5.23620.2" />
+  </ItemGroup>
+</Project>

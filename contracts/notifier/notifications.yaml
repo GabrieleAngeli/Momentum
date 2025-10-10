@@ -1,0 +1,36 @@
+openapi: 3.1.0
+info:
+  title: Notifier API
+  version: 1.0.0
+paths:
+  /api/notifications:
+    post:
+      summary: Dispatch notification
+      operationId: dispatchNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchNotificationCommand'
+      responses:
+        '202':
+          description: Accepted
+components:
+  schemas:
+    DispatchNotificationCommand:
+      type: object
+      required: [eventId, channel, recipient, message, createdAt]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        channel:
+          type: string
+        recipient:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
