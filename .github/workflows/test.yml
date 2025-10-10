@@ -24,8 +24,7 @@ jobs:
         image: redpandadata/redpanda:v24.2.1
         ports:
           - 9092:9092
-        options: >-
-          --health-cmd="bash -c 'rpk cluster info -X brokers=localhost:9092 || exit 1'" --health-interval=5s --health-timeout=3s --health-retries=60
+        options: --health-cmd="bash -c 'rpk cluster info -X brokers=localhost:9092 || exit 1'" --health-interval=5s --health-timeout=3s --health-retries=60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
