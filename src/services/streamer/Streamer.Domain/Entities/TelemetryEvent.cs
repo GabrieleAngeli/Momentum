@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace Streamer.Domain.Entities;
 
 public sealed class TelemetryEvent

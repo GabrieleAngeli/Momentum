@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace WebBackendCore.Domain.Aggregates;
 
 public sealed class NotificationStream

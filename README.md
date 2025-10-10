@@ -11,6 +11,7 @@ Momentum è una piattaforma modulare e resiliente progettata per essere eseguita
 - **Realtime**: SignalR e canali notifiche
 - **Observability**: OpenTelemetry → Prometheus, Loki, Tempo, Grafana
 - **Sicurezza**: JWT, OpenFeature-ready
+- **Licensing**: Solo componenti OSS (immagini Docker `-oss`/Debian e librerie community)
 
 ## Quick start
 

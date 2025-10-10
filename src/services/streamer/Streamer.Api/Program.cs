@@ -1,4 +1,6 @@
+using System;
 using Dapr.Client;
+using Google.Protobuf.WellKnownTypes;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;

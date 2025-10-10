@@ -1,4 +1,9 @@
+using System.Threading;
+using System.Threading.Tasks;
+using Azure;
 using Azure.Communication.Email;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Notifier.Application.Dispatching;
 using Notifier.Domain.Entities;
 

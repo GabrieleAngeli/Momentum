@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using Notifier.Domain.Entities;
 
 namespace Notifier.Application.Dispatching;

@@ -1,3 +1,5 @@
+using System;
+
 namespace Notifier.Domain.Entities;
 
 public sealed class Notification

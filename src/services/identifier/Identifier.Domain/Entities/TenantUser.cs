@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace Identifier.Domain.Entities;
 
 public sealed class TenantUser
