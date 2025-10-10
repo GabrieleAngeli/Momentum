@@ -13,8 +13,9 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
   issues: read
+  pull-requests: read
 
 jobs:
   release-notes:
@@ -39,9 +40,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BASE_REF="${{ inputs.base_ref }}"
-          if [ -z "$BASE_REF" ]; then
+
+          # Se arriva "0.0.0", prova a trasformarlo in "v0.0.0" se esiste il tag
+          if [ "$BASE_REF" = "0.0.0" ]; then
+            if git rev-parse --verify "v0.0.0^{commit}" >/dev/null 2>&1; then
+              BASE_REF="v0.0.0"
+            else
+              BASE_REF=""
+            fi
+          fi
+
+          # Se non è stato passato nulla o non esiste, usa ultimo tag o primo commit
+          if [ -z "$BASE_REF" ] || ! git rev-parse --verify "${BASE_REF}^{commit}" >/dev/null 2>&1; then
             BASE_REF=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
           fi
+
           python tools/release_notes/generate_release_notes.py \
             --release-version "${{ inputs.release_version }}" \
             --base-ref "$BASE_REF" \
