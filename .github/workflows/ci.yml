@@ -28,10 +28,7 @@ jobs:
         options: >-
           --health-cmd="bash -c 'rpk cluster info -X brokers=localhost:9092 || exit 1'"
           --health-interval=5s --health-timeout=3s --health-retries=60
-      kafka-zk:
-        image: bitnami/zookeeper:3.9
-        ports:
-          - 2181:2181
+          
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

@@ -59,25 +59,28 @@ def _ref_exists(ref: str) -> bool:
     except subprocess.CalledProcessError:
         return False
 
+def _normalize_ref(ref: str) -> str:
+    """Se ref non esiste ma esiste 'v'+ref, usa quello."""
+    if not ref:
+        return ref
+    if _ref_exists(ref):
+        return ref
+    vref = f"v{ref}"
+    return vref if _ref_exists(vref) else ref
 
 def determine_commits(base_ref: str, head_ref: str) -> List[str]:
+    base_ref = _normalize_ref(base_ref) if base_ref else base_ref
     if base_ref:
         if not _ref_exists(base_ref):
-            print(
-                (
-                    "Riferimento di base "
-                    f"'{base_ref}' inesistente, considero tutti i commit fino a {head_ref}."
-                ),
-                file=sys.stderr,
-            )
+            print(f"Riferimento di base '{base_ref}' inesistente, considero tutti i commit fino a {head_ref}.", file=sys.stderr)
             range_spec = head_ref
         else:
             range_spec = f"{base_ref}..{head_ref}"
     else:
         range_spec = head_ref
     output = run_git(["rev-list", range_spec])
-    commits = [line for line in output.splitlines() if line]
-    commits.reverse()  # cronologico
+    commits = [l for l in output.splitlines() if l]
+    commits.reverse()
     return commits
 
 
