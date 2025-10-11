@@ -13,6 +13,7 @@ import re
 import sys
 import textwrap
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import List, Optional, Sequence, Tuple
 
 import requests
@@ -71,6 +72,22 @@ class GitHubClient:
         self._raise_for_status(response, "creazione della issue")
         data = response.json()
         return data["number"]
+
+    def find_recent_issue(self, title: str, window_days: int = 90) -> Optional[int]:
+        cutoff = (datetime.utcnow() - timedelta(days=window_days)).date().isoformat()
+        query = (
+            f"repo:{self._repo} type:issue in:title \"{title}\" created:>={cutoff}"
+        )
+        response = self._session.get(
+            "https://api.github.com/search/issues",
+            params={"q": query, "per_page": 5},
+            timeout=30,
+        )
+        self._raise_for_status(response, "ricerca di issue simili")
+        for item in response.json().get("items", []):
+            if item.get("title", "").strip().lower() == title.strip().lower():
+                return int(item.get("number"))
+        return None
 
     def list_pull_request_commits(self, pr_number: int) -> List[Commit]:
         commits: List[Commit] = []
@@ -240,12 +257,19 @@ def ensure_issue_links(
             """
         ).strip()
 
-        issue_number = client.create_issue(title=title, body=body, labels=labels)
-        log_messages.append(
-            f"Creata issue #{issue_number} per il commit {commit.short_sha}."
-        )
+        existing_issue = client.find_recent_issue(title)
+        if existing_issue:
+            issue_number = existing_issue
+            log_messages.append(
+                f"Riutilizzata issue #{issue_number} per il commit {commit.short_sha}."
+            )
+        else:
+            issue_number = client.create_issue(title=title, body=body, labels=labels)
+            log_messages.append(
+                f"Creata issue #{issue_number} per il commit {commit.short_sha}."
+            )
 
-        bullet = f"- Fixes #{issue_number} (commit {commit.short_sha})"
+        bullet = f"- Closes #{issue_number} (commit {commit.short_sha})"
         if bullet not in pr_body:
             pr_body = (pr_body + "\n" + bullet).strip()
 
