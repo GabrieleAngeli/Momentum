@@ -47,11 +47,9 @@ viene annullata automaticamente a meno che non sia impostato
 
 Per garantire la tracciabilità, il workflow esegue
 `tools/issue_management/ensure_issue_links.py` su ogni PR interna.
-Quando un commit non contiene riferimenti a issue, viene aperta (o
-riutilizzata, se ne esiste una equivalente negli ultimi 90 giorni) una
-nuova issue con label coerenti (`feature`, `bug` o `tech-debt`) e il
-corpo della PR viene aggiornato con una voce `Closes #<id>` che mantiene
-il collegamento fino al merge.
+Quando un commit non contiene riferimenti a issue, viene aperta una
+nuova issue (con label `feature`, `bug` o `tech-debt`) e il corpo della
+PR viene aggiornato con una voce `Fixes #<id>`.
 
 Questa funzionalità è disabilitata automaticamente per le PR provenienti
 da fork, dove il workflow opera solo in modalità dry-run.

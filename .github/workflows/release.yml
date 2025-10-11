@@ -11,16 +11,6 @@ on:
       - ready_for_review
       - labeled
       - unlabeled
-  pull_request_target:
-    branches:
-      - main
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-      - labeled
-      - unlabeled
   push:
     branches:
       - main
@@ -44,19 +34,14 @@ jobs:
         uses: wagoid/commitlint-github-action@v6
 
   plan-release:
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request'
+    needs: commitlint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          persist-credentials: false
-
-      - name: Fetch pull request head
-        run: |
-          git fetch --no-tags --prune --depth=0 origin \
-            pull/${{ github.event.pull_request.number }}/head:refs/remotes/pull/${{ github.event.pull_request.number }}/head
 
       - uses: actions/setup-python@v5
         with:
@@ -132,9 +117,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
           branch: ${{ steps.plan.outputs.release_branch }}
-          title: "chore: release v${{ steps.plan.outputs.version }}"
+          title: chore: release v${{ steps.plan.outputs.version }}
           body-path: ${{ steps.plan.outputs.pr_body_path }}
-          commit-message: "chore: prepare release v${{ steps.plan.outputs.version }}"
+          commit-message: chore: prepare release v${{ steps.plan.outputs.version }}
           add-paths: |
             ReleaseNotes/**
           delete-branch: false
