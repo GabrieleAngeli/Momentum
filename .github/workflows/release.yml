@@ -2,19 +2,12 @@ name: Release automation
 
 on:
   pull_request:
-    branches:
-      - main
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-      - labeled
-      - unlabeled
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, ready_for_review, labeled, unlabeled ]
   push:
     branches:
       - main
-      - 'release/v**'
+      - 'release/v*'     # FIX: pattern valido per branch tipo release/v1.2.3
   workflow_dispatch:
 
 permissions:
@@ -88,7 +81,7 @@ jobs:
       - name: Show release notes preview
         run: |
           echo "--- Release Notes Preview ---"
-          cat ${{ steps.plan.outputs.preview_path }} || true
+          cat "${{ steps.plan.outputs.preview_path }}" || true
           echo "--------------------------------"
 
       - name: Update release labels
@@ -118,7 +111,7 @@ jobs:
           base: main
           branch: ${{ steps.plan.outputs.release_branch }}
           title: chore: release v${{ steps.plan.outputs.version }}
-          body-path: ${{ steps.plan.outputs.pr_body_path }}
+          body-path: ${{ steps.plan.outputs.pr_body_path }}   # FIX: riga valida; rimosso testo d’errore incollato
           commit-message: chore: prepare release v${{ steps.plan.outputs.version }}
           add-paths: |
             ReleaseNotes/**
