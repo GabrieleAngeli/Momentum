@@ -152,10 +152,12 @@ jobs:
   finalize-release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write          # serve per creare il tag e la Release
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0       # serve per leggere i tag
 
       - uses: actions/setup-python@v5
         with:
@@ -170,6 +172,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python tools/release_notes/ci_release.py finalize \
+          python -m tools.release_notes.ci_release finalize \
             --repo "${{ github.repository }}" \
             --previous-ref "${{ github.event.before }}"
+
