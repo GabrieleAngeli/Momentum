@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
@@ -34,10 +35,30 @@ def ensure_clean_worktree(repository_root: Path) -> None:
 
 def ensure_on_main(repository_root: Path, expected_branch: str = "main") -> None:
     branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repository_root)
-    if branch.strip() != expected_branch:
-        raise RuntimeError(
-            f"La release deve essere creata partendo da {expected_branch}, branch corrente: {branch.strip()}."
-        )
+    normalized_branch = branch.strip()
+    if normalized_branch == expected_branch:
+        return
+
+    if normalized_branch == "HEAD":
+        head_sha = run_git(["rev-parse", "HEAD"], cwd=repository_root).strip()
+
+        def resolve_ref(ref: str) -> Optional[str]:
+            try:
+                return run_git(["rev-parse", ref], cwd=repository_root).strip()
+            except subprocess.CalledProcessError:
+                return None
+
+        # Prova prima il branch locale, poi quello remoto origin/<branch>.
+        target_sha = resolve_ref(expected_branch)
+        if target_sha is None:
+            target_sha = resolve_ref(f"origin/{expected_branch}")
+
+        if target_sha and target_sha == head_sha:
+            return
+
+    raise RuntimeError(
+        f"La release deve essere creata partendo da {expected_branch}, branch corrente: {normalized_branch}."
+    )
 
 
 def generate_release_notes(

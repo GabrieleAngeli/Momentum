@@ -1,0 +1,8 @@
+{
+  "name": "momentum-release-automation",
+  "private": true,
+  "devDependencies": {
+    "@commitlint/cli": "^19.2.2",
+    "@commitlint/config-conventional": "^19.2.2"
+  }
+}
