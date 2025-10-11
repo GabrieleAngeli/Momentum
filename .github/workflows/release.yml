@@ -25,6 +25,12 @@ jobs:
           fetch-depth: 0
       - name: Validate commit messages
         uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.json   # vedi sotto
+          failOnWarnings: false
+          commitDepth: 0                   # assicura che legga tutti i commit della PR
+          token: ${{ secrets.GITHUB_TOKEN }}
+          helpURL: https://www.conventionalcommits.org/it/v1.0.0/
 
   plan-release:
     if: github.event_name == 'pull_request'
