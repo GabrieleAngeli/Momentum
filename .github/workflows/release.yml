@@ -110,9 +110,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
           branch: ${{ steps.plan.outputs.release_branch }}
-          title: chore: release v${{ steps.plan.outputs.version }}
+          title: "chore: release v${{ steps.plan.outputs.version }}"
           body-path: ${{ steps.plan.outputs.pr_body_path }}   # FIX: riga valida; rimosso testo d’errore incollato
-          commit-message: chore: prepare release v${{ steps.plan.outputs.version }}
+          commit-message: "chore: prepare release v${{ steps.plan.outputs.version }}"
           add-paths: |
             ReleaseNotes/**
           delete-branch: false
