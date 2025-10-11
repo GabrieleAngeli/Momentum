@@ -1,0 +1,8 @@
+{
+  "tagPrefix": "v",
+  "allowDocsOnlyRelease": false,
+  "excludeCategories": ["chore"],
+  "githubRelease": {
+    "draft": false
+  }
+}
