@@ -1,114 +1,96 @@
-# Flusso di rilascio automatizzato
+# Automated Release Flow / Flusso di Rilascio Automatizzato
 
-Questo documento descrive il comportamento del workflow GitHub Actions
-`Release automation` e come preparare correttamente una release di
-Momentum.
+## Overview / Panoramica
+**English:** This document describes how the `Release automation` GitHub Actions workflow prepares a Momentum release.
 
-## Convenzioni sui commit
+**Italiano:** Questo documento descrive come il workflow GitHub Actions `Release automation` prepara una release di Momentum.
 
-Il repository utilizza le [Conventional Commits](https://www.conventionalcommits.org/).
-Le tipologie rilevanti per il calcolo della versione sono:
+## Commit conventions / Convenzioni sui commit
+**English:**
+- The repository follows [Conventional Commits](https://www.conventionalcommits.org/).
+- Relevant types for version calculation: `feat:` → **minor**, `fix:`/`perf:`/`refactor:` → **patch**, commits with `BREAKING CHANGE` or `!` → **major**.
+- The workflow runs `commitlint` on every pull request targeting `main`; keep commits compliant to avoid validation failures.
 
-- `feat:` → incremento **minor**
-- `fix:`, `perf:`, `refactor:` → incremento **patch**
-- commit con `BREAKING CHANGE` o `!` → incremento **major**
+**Italiano:**
+- Il repository utilizza le [Conventional Commits](https://www.conventionalcommits.org/).
+- Tipologie rilevanti per il calcolo versione: `feat:` → **minor**, `fix:`/`perf:`/`refactor:` → **patch**, commit con `BREAKING CHANGE` o `!` → **major**.
+- Il workflow esegue `commitlint` su ogni pull request verso `main`; mantieni i commit conformi per evitare errori di validazione.
 
-Il workflow esegue `commitlint` su ogni pull request verso `main`.
-Assicurati che ogni commit rispetti il formato per evitare errori di
-validazione.
+## Version calculation / Calcolo della versione
+**English:**
+- `tools/release_notes/ci_release.py plan` inspects commits between the latest `v*` tag and the PR head, computes `nextVersion`, and opens/updates a `release/v<nextVersion>` PR.
+- Adjust the bump by: (1) applying a PR label (`release:major|minor|patch`); or (2) adding `.release-override.yml` with optional fields:
+  ```yaml
+  bump: minor   # major | minor | patch
+  version: 1.4.0
+  allowDocsOnlyRelease: true
+  excludeCategories:
+    - chore
+  ```
+- If a PR only contains documentation or `chore` commits the release is skipped unless `allowDocsOnlyRelease: true` is set.
 
-## Calcolo della versione
+**Italiano:**
+- `tools/release_notes/ci_release.py plan` analizza i commit tra l'ultimo tag `v*` e la testa della PR, calcola `nextVersion` e apre/aggiorna una PR `release/v<nextVersion>`.
+- Puoi modificare il bump: (1) applicando una label alla PR (`release:major|minor|patch`); oppure (2) aggiungendo `.release-override.yml` con i campi opzionali riportati sopra.
+- Se la PR contiene solo commit di documentazione o `chore`, la release viene saltata a meno che `allowDocsOnlyRelease: true` non sia impostato.
 
-Il comando `tools/release_notes/ci_release.py plan` analizza i commit
-presenti tra l'ultimo tag `v*` e la testa della pull request. In base
-alle tipologie individuate calcola la versione `nextVersion` e crea un
-branch di servizio `release/v<nextVersion>` tramite PR automatica.
+## Automatic issue creation / Creazione automatica delle issue
+**English:**
+- To preserve traceability the workflow runs `tools/issue_management/ensure_issue_links.py` on every internal PR.
+- When a commit lacks issue references, the script opens a new issue (`feature`, `bug`, or `tech-debt`) and updates the PR body with `Fixes #<id>`.
+- For forks the script operates in dry-run mode and performs no write operations.
 
-Il bump può essere modificato in due modi:
-
-1. Applicando una label sulla PR: `release:major`, `release:minor` o
-   `release:patch`.
-2. Creando un file `.release-override.yml` nella root della PR con i
-   seguenti campi opzionali:
-
-   ```yaml
-   bump: minor   # major | minor | patch
-   version: 1.4.0
-   allowDocsOnlyRelease: true
-   excludeCategories:
-     - chore
-   ```
-
-Se la PR contiene solo commit di documentazione o `chore`, la release
-viene annullata automaticamente a meno che non sia impostato
-`allowDocsOnlyRelease: true`.
-
-## Creazione automatica delle issue
-
-Per garantire la tracciabilità, il workflow esegue
-`tools/issue_management/ensure_issue_links.py` su ogni PR interna.
-Quando un commit non contiene riferimenti a issue, viene aperta una
-nuova issue (con label `feature`, `bug` o `tech-debt`) e il corpo della
-PR viene aggiornato con una voce `Fixes #<id>`.
-
-Questa funzionalità è disabilitata automaticamente per le PR provenienti
-da fork, dove il workflow opera solo in modalità dry-run.
+**Italiano:**
+- Per mantenere la tracciabilità il workflow esegue `tools/issue_management/ensure_issue_links.py` su ogni PR interna.
+- Quando un commit non contiene riferimenti a issue, lo script apre una nuova issue (`feature`, `bug` o `tech-debt`) e aggiorna il corpo della PR con `Fixes #<id>`.
+- Sui fork lo script lavora in modalità dry-run senza effettuare scritture.
 
 ## Release notes
+**English:**
+- During planning the workflow generates `ReleaseNotes/<version>.md` from `.github/release_notes.hbs`, grouping entries under Breaking Changes, Features, Fixes, Performance, Refactor, Docs, and Chore.
+- A PR comment shows the preview along with the pre-merge checklist (Tests, Lint, Build, Security scan).
 
-Durante la fase di pianificazione viene generato il file
-`ReleaseNotes/<version>.md` utilizzando il template
-`.github/release_notes.hbs`. Le categorie riportate sono: Breaking
-Changes, Features, Fixes, Performance, Refactor, Docs e Chore. Ogni
-voce include il titolo della issue (con link) oppure un titolo sintetico
-derivato dal commit.
+**Italiano:**
+- In fase di pianificazione viene generato `ReleaseNotes/<version>.md` usando `.github/release_notes.hbs`, con categorie Breaking Changes, Features, Fixes, Performance, Refactor, Docs e Chore.
+- Un commento sulla PR mostra la preview insieme alla checklist pre-merge (Test, Lint, Build, Security scan).
 
-Un commento sulla PR mostra la preview delle release notes insieme alla
-checklist pre-merge:
+## Release PR management / Gestione della PR di release
+**English:** If the PR is not from a fork, the workflow creates or updates `release/v<version>` → `main` with the release notes file. It must follow the protected-branch merge rules.
 
-- Test
-- Lint
-- Build
-- Security scan
+**Italiano:** Se la PR non proviene da un fork, il workflow crea o aggiorna `release/v<version>` → `main` con il file di release notes. Deve rispettare le regole di merge del branch protetto.
 
-## Gestione della PR di release
+## Branch workflows / Workflow sui branch
+**English:**
+- **PR to main:** version planning, release notes generation, release branch sync, missing issue creation, PR labelling, preview publication.
+- **Push to `release/v*`:** validates that release notes stay aligned with the computed plan.
+- **Push to `main`:** creates tag `v<version>` and the GitHub Release (draft or final according to `.releaserc` `githubRelease.draft`).
 
-Se la PR non proviene da un fork, il workflow aggiorna o crea una PR
-`release/v<version>` → `main` contenente il file di release notes. Questa
-PR deve rispettare le stesse regole di merge del branch protetto.
+**Italiano:**
+- **Pull request verso main:** pianificazione versione, generazione release notes, sincronizzazione branch di release, creazione issue mancanti, etichettatura PR, pubblicazione della preview.
+- **Push su `release/v*`:** valida che le release notes restino allineate al piano calcolato.
+- **Push su `main`:** crea il tag `v<version>` e la GitHub Release (bozza o definitiva in base a `githubRelease.draft` in `.releaserc`).
 
-## Workflow sui branch
+## Environments & forks / Ambienti e fork
+**English:** Fork-originated PRs run in dry-run mode: no issues, labels, comments, or release PRs are created. This avoids unauthorised writes to external repositories.
 
-- **Pull request verso main**: calcolo versione, generazione release
-  notes, creazione/aggiornamento del branch di release, creazione issue
-  mancanti, etichettatura della PR e pubblicazione della preview.
-- **Push su release/v\***: validazione della sincronizzazione delle
-  release notes rispetto al piano calcolato.
-- **Push su main**: creazione del tag `v<version>` e della GitHub
-  Release (bozza o definitiva a seconda del campo `githubRelease.draft`
-in `.releaserc`).
+**Italiano:** Le PR provenienti da fork girano in modalità dry-run: non vengono create issue, label, commenti o PR di release, evitando scritture non autorizzate verso repository esterni.
 
-## Ambienti e fork
+## Manual overrides / Override manuali
+**English:** Besides `.release-override.yml`, adjust categories via `.releaserc`. Currently the `chore` category is excluded from publication.
 
-Le PR provenienti da fork vengono eseguite in modalità dry-run: non
-vengono create issue, label o commenti, né viene aperta la PR di release.
-Questo evita scritture non autorizzate su repository esterni.
+**Italiano:** Oltre a `.release-override.yml`, puoi modificare le categorie tramite `.releaserc`. Al momento la categoria `chore` è esclusa dalla pubblicazione.
 
-## Override manuali
+## Troubleshooting / Risoluzione problemi
+**English:**
+- Inspect the `plan-release` job logs for detailed plans.
+- Review `.github/release-preview.md` generated locally for the full notes preview.
+- Resolve conflicts on `release/v*`, then rerun the workflow (`sync` keeps artefacts consistent).
 
-Oltre a `.release-override.yml`, è possibile escludere categorie dalle
-release notes modificando `.releaserc`. Le impostazioni correnti
-escludono la categoria `chore` dalla pubblicazione.
+**Italiano:**
+- Controlla i log del job `plan-release` per il dettaglio del piano.
+- Consulta `.github/release-preview.md` generato localmente per la preview completa delle note.
+- Risolvi manualmente i conflitti su `release/v*` e rilancia il workflow (`sync` mantiene coerenti gli artefatti).
 
-## Risoluzione problemi
+**English:** For further customisation see `tools/release_notes/ci_release.py` and `.github/workflows/release.yml`.
 
-- Verifica i log del job `plan-release` per il dettaglio del piano.
-- Controlla il file `.github/release-preview.md` generato localmente per
-  la preview completa delle note.
-- In caso di conflitti sul branch `release/v*`, risolvere manualmente e
-  rilanciare il workflow (il comando `sync` garantisce la coerenza degli
-  artefatti).
-
-Per ulteriori personalizzazioni consulta
-`tools/release_notes/ci_release.py` e il workflow
-`.github/workflows/release.yml`.
+**Italiano:** Per ulteriori personalizzazioni consulta `tools/release_notes/ci_release.py` e `.github/workflows/release.yml`.

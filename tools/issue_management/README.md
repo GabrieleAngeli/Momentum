@@ -1,13 +1,11 @@
-# Issue management automation
+# Issue management automation / Automazione della gestione issue
 
-Lo script `ensure_issue_links.py` viene eseguito come parte della pipeline di verifica delle
-pull request per controllare che ogni commit sia collegato ad almeno una issue. Quando il
-parametro `--auto-create` è abilitato e sono disponibili le variabili `GITHUB_TOKEN` e
-`OPENAI_API_KEY`, il tool genera automaticamente una nuova issue riassumendo il commit e
-aggiorna il corpo della pull request aggiungendo il riferimento `Fixes #<numero>`.
+## Purpose / Scopo
+**English:** `ensure_issue_links.py` runs as part of the pull request validation pipeline to ensure every commit links to at least one issue. With `--auto-create` and the `GITHUB_TOKEN`/`OPENAI_API_KEY` variables available, the tool creates a new issue summarising the commit and updates the PR body with `Fixes #<number>`.
 
-## Esecuzione manuale
+**Italiano:** `ensure_issue_links.py` viene eseguito nella pipeline di verifica delle pull request per garantire che ogni commit sia collegato ad almeno una issue. Con `--auto-create` e le variabili `GITHUB_TOKEN`/`OPENAI_API_KEY` disponibili, lo strumento crea una nuova issue con il riassunto del commit e aggiorna il corpo della PR con `Fixes #<numero>`.
 
+## Manual execution / Esecuzione manuale
 ```bash
 python tools/issue_management/ensure_issue_links.py \
   --repo <owner>/<repository> \
@@ -15,12 +13,14 @@ python tools/issue_management/ensure_issue_links.py \
   --auto-create
 ```
 
-Il comando restituisce uno stato di errore se sono presenti commit senza riferimento ad una
-issue. In modalità automatica viene creato un ticket con il riassunto delle modifiche.
+**English:** The command returns an error status when commits lack issue references. In auto mode it opens a ticket with the summary.
 
-Dipendenze Python:
+**Italiano:** Il comando restituisce uno stato di errore se sono presenti commit senza riferimento a una issue. In modalità automatica apre un ticket con il riassunto.
+
+**English:** Install Python dependencies with:
+
+**Italiano:** Installa le dipendenze Python con:
 
 ```bash
 pip install -r tools/issue_management/requirements.txt
 ```
-
