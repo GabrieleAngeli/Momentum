@@ -23,6 +23,6 @@ Repository context excerpts:
 Instructions:
 - Infer the intent and scope of the change using the diff and supporting context.
 - Document impacts across architecture, security, testing, observability, and module ownership.
-- Suggest concrete documentation updates. Provide unified diffs for each update.
+- Suggest concrete documentation updates. Provide unified diffs for each update with precise hunk headers (e.g., `@@ -12,7 +12,8 @@`) and verbatim context—no ellipses or truncated lines.
 - Optimise your proposals for execution via the Momentum Codex Gateway (OpenAI-compatible, self-hosted).
 - Only return JSON matching the system prompt schema. No prose outside the JSON body.

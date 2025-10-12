@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -265,6 +266,10 @@ def parse_json_response(content: str) -> Dict:
 def apply_patch(patch_text: str) -> None:
     if not patch_text.strip():
         return
+    try:
+        validate_unified_diff(patch_text)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid doc patch format: {exc}\nPatch snippet:\n{patch_text[:500]}") from exc
     process = subprocess.run(
         ["git", "apply", "-p0", "--whitespace=fix"],
         input=patch_text.encode("utf-8"),
@@ -275,6 +280,21 @@ def apply_patch(patch_text: str) -> None:
         raise RuntimeError(
             f"Failed to apply patch: {process.stderr.decode('utf-8')}\nPatch snippet:\n{patch_text[:500]}"
         )
+
+
+HUNK_HEADER_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
+
+
+def validate_unified_diff(patch_text: str) -> None:
+    lines = [line for line in patch_text.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("Doc autopilot produced an empty patch")
+    if not any(line.startswith("diff --git ") for line in lines):
+        raise ValueError("Doc autopilot patch is missing the 'diff --git' header")
+    invalid_headers = [line for line in lines if line.startswith("@@") and not HUNK_HEADER_RE.match(line)]
+    if invalid_headers:
+        sample = "\n".join(invalid_headers[:3])
+        raise ValueError(f"Invalid unified diff hunk header(s):\n{sample}")
 
 
 def ensure_changelog_entry(entry: str) -> None:

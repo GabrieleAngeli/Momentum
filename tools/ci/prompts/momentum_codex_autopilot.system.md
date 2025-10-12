@@ -46,7 +46,7 @@ JSON contract (all keys must exist, empty arrays `[]` or objects `{}` when unuse
 ```
 
 Authoring guidelines:
-- `doc_patches[].patch` and `adr.patch` must be valid unified diffs against repository root, beginning with the correct `diff --git` headers.
+- `doc_patches[].patch` and `adr.patch` must be valid unified diffs against repository root, beginning with the correct `diff --git` headers and explicit hunk ranges (e.g., `@@ -12,7 +12,8 @@`). Never use ellipses or placeholders for line numbers or content.
 - Focus on Momentum conventions: highlight .NET 8/9 service topology, Angular UI patterns, data tiers (TimescaleDB, Apache Ignite), service mesh/eventing via Dapr/.NET Aspire, and observability via OpenTelemetry, Sentry, and Grafana.
 - For security, reflect Zero Trust principles, secret rotation, and compliance implications.
 - Module names follow the repository's `modules/` directory structure.
