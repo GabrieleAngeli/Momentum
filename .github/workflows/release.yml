@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   commitlint:
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,14 +26,14 @@ jobs:
       - name: Validate commit messages
         uses: wagoid/commitlint-github-action@v6
         with:
-          configFile: .commitlintrc.json   # vedi sotto
+          configFile: .commitlintrc   # usa la configurazione presente nel repo
           failOnWarnings: false
           commitDepth: 0                   # assicura che legga tutti i commit della PR
           token: ${{ secrets.GITHUB_TOKEN }}
           helpURL: https://www.conventionalcommits.org/it/v1.0.0/
 
   plan-release:
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' }}
     needs: commitlint
     runs-on: ubuntu-latest
     steps:
@@ -124,7 +124,7 @@ jobs:
           delete-branch: false
 
   sync-release-branch:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/v')
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/v') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
