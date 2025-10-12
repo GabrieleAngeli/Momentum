@@ -139,22 +139,59 @@ def collect_commits(base_ref: Optional[str], head_ref: str = "HEAD") -> List[Com
         range_spec = f"{base_ref}..{head_ref}"
     else:
         range_spec = head_ref
+    pretty_format = "%H%x01%B%x02FILES%x02"
     raw_log = run_git(
         [
             "log",
             range_spec,
-            "--pretty=format:%H%x01%B%x02",
+            f"--pretty=format:{pretty_format}",
             "--name-only",
         ]
     )
     commits: List[CommitMetadata] = []
-    for chunk in raw_log.split("\x02\n"):
-        if not chunk.strip():
+    current_sha: Optional[str] = None
+    message_lines: List[str] = []
+    files: List[str] = []
+    collecting_files = False
+
+    def flush_current_commit() -> None:
+        nonlocal current_sha, message_lines, files, collecting_files
+        if current_sha is None:
+            return
+        message = "\n".join(message_lines).strip()
+        normalized_files = [file_path.strip() for file_path in files if file_path.strip()]
+        commits.append(
+            CommitMetadata(sha=current_sha, message=message, files=normalized_files)
+        )
+        current_sha = None
+        message_lines = []
+        files = []
+        collecting_files = False
+
+    for line in raw_log.splitlines():
+        if "\x01" in line:
+            flush_current_commit()
+            sha, first_line = line.split("\x01", 1)
+            current_sha = sha
+            message_lines = [first_line]
+            files = []
+            collecting_files = False
             continue
-        header, *file_lines = chunk.splitlines()
-        sha, message = header.split("\x01", 1)
-        files = [line.strip() for line in file_lines if line.strip()]
-        commits.append(CommitMetadata(sha=sha, message=message.strip(), files=files))
+        if line == "\x02FILES\x02":
+            collecting_files = True
+            continue
+        if collecting_files:
+            if not line.strip():
+                flush_current_commit()
+            else:
+                files.append(line)
+            continue
+        # Parte del messaggio del commit (inclusi spazi vuoti)
+        if current_sha is not None:
+            message_lines.append(line)
+
+    flush_current_commit()
+
     commits.reverse()  # ordine cronologico
     return commits
 
