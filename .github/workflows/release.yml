@@ -145,6 +145,8 @@ jobs:
           cp "$plan_path" "$tmp_dir/release-plan.json"
           cp "$pr_body_path" "$tmp_dir/pr-body.md"
 
+          rm -f "$release_notes_path" "$plan_path" "$pr_body_path"
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
