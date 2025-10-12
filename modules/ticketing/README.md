@@ -1,3 +1,5 @@
-# Ticketing Module
+# Ticketing Module / Modulo Ticketing
 
-Example plug-in module exposing OpenAPI contract via Dapr invocation. The module can be hosted as part of the monolith or independently.
+**English:** Example plug-in module exposing an OpenAPI contract via Dapr invocation. It can run inside the monolith or independently.
+
+**Italiano:** Modulo plug-in di esempio che espone un contratto OpenAPI tramite invocazione Dapr. Può essere eseguito all'interno del monolite o in modo indipendente.

@@ -1,7 +1,16 @@
-# Data Guidelines
+# Data Guidelines / Linee Guida sui Dati
 
-- Timescale schema `telemetry_events` gestito via migrazioni (TODO EF Core migrations).
-- Ignite usato per cache realtime e analytics in-memory.
-- Retention Timescale 365 giorni con compressione.
-- Dati sensibili cifrati at-rest e in-transit.
-- Solo componenti database/cache open source (TimescaleDB OSS, Apache Ignite OSS) per conformità licenze.
+## Storage strategy / Strategia di storage
+**English:**
+- Timescale schema `telemetry_events` managed through migrations (TODO EF Core migrations).
+- Ignite powers realtime cache and in-memory analytics.
+- Timescale retention set to 365 days with compression enabled.
+- Sensitive data encrypted at rest and in transit.
+- Only OSS database/cache components (TimescaleDB OSS, Apache Ignite OSS) to honour licensing requirements.
+
+**Italiano:**
+- Lo schema Timescale `telemetry_events` è gestito tramite migrazioni (TODO EF Core migrations).
+- Ignite alimenta la cache realtime e le analisi in-memory.
+- La retention di Timescale è impostata a 365 giorni con compressione attiva.
+- I dati sensibili sono cifrati at-rest e in-transit.
+- Sono utilizzati solo componenti database/cache OSS (TimescaleDB OSS, Apache Ignite OSS) per rispettare i requisiti di licenza.
