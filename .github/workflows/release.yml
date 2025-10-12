@@ -95,8 +95,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           for label in release:major release:minor release:patch; do
             gh pr edit ${{ github.event.pull_request.number }} --remove-label "$label" || true
+            if ! gh label view "$label" >/dev/null 2>&1; then
+              gh label create "$label" --color "0E8A16" --description "Release ${label#release:}"
+            fi
           done
           gh pr edit ${{ github.event.pull_request.number }} --add-label "release:${{ steps.plan.outputs.bump }}"
 
