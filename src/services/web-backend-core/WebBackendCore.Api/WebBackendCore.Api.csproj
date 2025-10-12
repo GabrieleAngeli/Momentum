@@ -7,10 +7,8 @@
   <ItemGroup>
     <PackageReference Include="Dapr.AspNetCore" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
-    <PackageReference Include="Aspire.Microsoft.AspNetCore.Hosting" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="OpenFeature" />
-    <PackageReference Include="OpenFeature.Contrib.Providers.Memory" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../WebBackendCore.Application/WebBackendCore.Application.csproj" />
