@@ -1,0 +1,47 @@
+<Project>
+  
+  <!-- See https://aka.ms/dotnet/msbuild/customize for more details on customizing your build -->
+  <PropertyGroup>
+    
+    <DefaultTargetFramework>net8.0</DefaultTargetFramework>
+    <TargetFrameworks>$(DefaultTargetFramework)</TargetFrameworks>
+    <AllTargetFrameworks>$(DefaultTargetFramework);net9.0</AllTargetFrameworks>
+    <LangVersion>latest</LangVersion>
+
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <AspireMajorVersion>9</AspireMajorVersion>
+    <AspireVersion>$(AspireMajorVersion).5.1</AspireVersion>
+    <AspireAppHostSdkVersion>$(AspireVersion)</AspireAppHostSdkVersion>
+    <AspireComunityVersion>9.8.0</AspireComunityVersion>
+    <AspNetCoreVersion>8.0.20</AspNetCoreVersion>
+    <DotNetExtensionsVersion>9.0.4</DotNetExtensionsVersion>
+    <OpenTelemetryVersion>1.11.2</OpenTelemetryVersion>
+    <TestContainersVersion>4.4.0</TestContainersVersion>
+    <MEAIVersion>9.5.0</MEAIVersion>
+    <IsPackable>false</IsPackable>
+
+    <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
+    <SharedDir>$(RepoRoot)src\Shared</SharedDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ContinuousIntegrationBuild>false</ContinuousIntegrationBuild>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Versioning -->
+  <PropertyGroup>
+    <ToolkitMinorVersion>7</ToolkitMinorVersion>
+    <ToolkitPatchVersion>2</ToolkitPatchVersion>
+    <ToolkitPreviewVersion>preview.1</ToolkitPreviewVersion>
+
+    <VersionPrefix>$(AspireMajorVersion).$(ToolkitMinorVersion).$(ToolkitPatchVersion)</VersionPrefix>
+  </PropertyGroup>
+</Project>

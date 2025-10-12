@@ -106,3 +106,5 @@ blob-report/
 # Docker / Containers
 docker-compose.override.yml
 *.pid
+
+**/tempo/data/**
