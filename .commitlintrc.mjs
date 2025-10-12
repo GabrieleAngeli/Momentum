@@ -1,6 +1,6 @@
-const ignoreLeadingOrTrailingWhitespace = message => message.trim() !== message;
+const ignoreLeadingOrTrailingWhitespace = (message) => message.trim() !== message;
 
-module.exports = {
+export default {
   extends: ['@commitlint/config-conventional'],
   rules: {
     'type-enum': [
@@ -14,7 +14,7 @@ module.exports = {
   },
   ignores: [
     ignoreLeadingOrTrailingWhitespace,
-    commit => commit.startsWith('Merge '),
-    commit => commit.startsWith('Revert "')
+    (commit) => commit.startsWith('Merge '),
+    (commit) => commit.startsWith('Revert "')
   ]
 };

@@ -26,7 +26,7 @@ jobs:
       - name: Validate commit messages
         uses: wagoid/commitlint-github-action@v6
         with:
-          configFile: .commitlintrc.js   # usa la configurazione presente nel repo
+          configFile: .commitlintrc.mjs   # usa la configurazione presente nel repo
           failOnWarnings: false
           commitDepth: 0                   # assicura che legga tutti i commit della PR
           token: ${{ secrets.GITHUB_TOKEN }}
