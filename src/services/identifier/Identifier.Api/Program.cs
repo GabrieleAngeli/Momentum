@@ -47,6 +47,8 @@ public sealed class IdentifierGrpcService : Identifier.Authentication.V1.Authent
 
     public override async Task<Identifier.Authentication.V1.AuthenticateReply> Authenticate(Identifier.Authentication.V1.AuthenticateRequest request, Grpc.Core.ServerCallContext context)
     {
+
+        Console.WriteLine($"Received authentication request for {request.Email}"); // TODO da eliminare
         var result = await _handler.HandleAsync(new AuthenticateUserCommand(request.Email, request.Password), context.CancellationToken);
         if (result is null)
         {
