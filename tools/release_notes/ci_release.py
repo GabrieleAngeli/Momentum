@@ -24,6 +24,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +33,10 @@ from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequ
 
 import requests
 import yaml
+
+if __package__ is None or __package__ == "":
+    REPO_ROOT = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(REPO_ROOT))
 
 from tools.release_notes.generate_release_notes import extract_issue_numbers
 from tools.release_notes.versioning import (
