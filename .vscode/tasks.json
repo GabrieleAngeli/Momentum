@@ -1,0 +1,55 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "restore Momentum solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "restore",
+        "Momentum.sln"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build Momentum AppHost",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "src/AppHost/Momentum.AppHost.csproj"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Start Angular web-core",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "start",
+        "--prefix",
+        "src/web-core"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "angular",
+        "pattern": {
+          "regexp": ".",
+          "file": 0,
+          "location": 0,
+          "message": 0
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": ".*Compiled successfully.*"
+        }
+      }
+    }
+  ]
+}
