@@ -24,4 +24,5 @@ Instructions:
 - Infer the intent and scope of the change using the diff and supporting context.
 - Document impacts across architecture, security, testing, observability, and module ownership.
 - Suggest concrete documentation updates. Provide unified diffs for each update.
+- Optimise your proposals for execution via the Momentum Codex Gateway (OpenAI-compatible, self-hosted).
 - Only return JSON matching the system prompt schema. No prose outside the JSON body.

@@ -9,9 +9,11 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from zoneinfo import ZoneInfo
+
+import requests
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYSTEM_PROMPT_PATH = REPO_ROOT / "tools" / "ci" / "prompts" / "momentum_codex_autopilot.system.md"
@@ -158,22 +160,73 @@ def render_user_prompt(template: str, values: Dict[str, str]) -> str:
 
 
 def call_model(system_prompt: str, user_prompt: str) -> Dict:
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is required")
+    provider = os.environ.get("CODEX_PROVIDER", "openai").lower()
     model = os.environ.get("MODEL", "gpt-4.1")
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0.2,
-        messages=[
+    if provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is required when CODEX_PROVIDER=openai")
+        base_url = os.environ.get("OPENAI_BASE_URL")
+        from openai import OpenAI
+
+        client_kwargs: Dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        client = OpenAI(**client_kwargs)
+        response = client.chat.completions.create(
+            model=model,
+            temperature=0.2,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        content = response.choices[0].message.content
+        return parse_json_response(content)
+    if provider in {"http", "self_hosted", "compat"}:
+        return call_http_compatible_model(model, system_prompt, user_prompt)
+    raise RuntimeError(f"Unsupported CODEX_PROVIDER '{provider}'")
+
+
+def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str) -> Dict:
+    base = os.environ.get("CODEX_API_BASE")
+    if not base:
+        raise RuntimeError(
+            "CODEX_API_BASE is required when CODEX_PROVIDER is set to an OpenAI-compatible HTTP mode"
+        )
+    endpoint = base.rstrip("/")
+    if not endpoint.endswith("/chat/completions"):
+        endpoint = f"{endpoint}/v1/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get("CODEX_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    timeout = float(os.environ.get("CODEX_HTTP_TIMEOUT", "120"))
+    payload = {
+        "model": model,
+        "temperature": 0.2,
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-    )
-    content = response.choices[0].message.content
-    return parse_json_response(content)
+    }
+    response = requests.post(endpoint, json=payload, headers=headers, timeout=timeout)
+    if response.status_code >= 400:
+        raise RuntimeError(
+            "Model gateway returned error "
+            f"{response.status_code}: {truncate(response.text, 1200)}"
+        )
+    try:
+        data = response.json()
+    except ValueError as exc:  # noqa: B902
+        raise RuntimeError("Model gateway response is not valid JSON") from exc
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("Model gateway response missing choices array")
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    if not isinstance(message, dict) or "content" not in message:
+        raise RuntimeError("Model gateway response missing message content")
+    return parse_json_response(message["content"])
 
 
 def parse_json_response(content: str) -> Dict:

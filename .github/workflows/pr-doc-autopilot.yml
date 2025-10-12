@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install openai gitpython pyyaml
+          pip install openai gitpython pyyaml requests
 
       - name: Export PR metadata
         run: |
@@ -36,6 +36,9 @@ jobs:
       - name: Run doc autopilot
         env:
           OPENAI_API_KEY: ${{ secrets.DOC_AUTOPILOT_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.DOC_AUTOPILOT_GATEWAY_KEY }}
+          CODEX_API_BASE: ${{ vars.DOC_AUTOPILOT_GATEWAY_BASE }}
+          CODEX_PROVIDER: ${{ vars.DOC_AUTOPILOT_PROVIDER || 'openai' }}
           MODEL: ${{ vars.DOC_AUTOPILOT_MODEL || 'gpt-4.1' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
