@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [ main ]
     types: [ opened, synchronize, reopened, ready_for_review, labeled, unlabeled ]
+  pull_request_target:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened, ready_for_review, labeled, unlabeled ]
   push:
     branches:
       - main
@@ -17,7 +20,7 @@ permissions:
 
 jobs:
   commitlint:
-    if: github.event_name == 'pull_request'
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,20 +29,20 @@ jobs:
       - name: Validate commit messages
         uses: wagoid/commitlint-github-action@v6
         with:
-          configFile: .commitlintrc.json   # vedi sotto
+          configFile: .commitlintrc.mjs   # usa la configurazione presente nel repo
           failOnWarnings: false
           commitDepth: 0                   # assicura che legga tutti i commit della PR
           token: ${{ secrets.GITHUB_TOKEN }}
           helpURL: https://www.conventionalcommits.org/it/v1.0.0/
 
   plan-release:
-    if: github.event_name == 'pull_request'
-    needs: commitlint
+    if: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -95,8 +98,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           for label in release:major release:minor release:patch; do
             gh pr edit ${{ github.event.pull_request.number }} --remove-label "$label" || true
+            gh label create "$label" --force --color "0E8A16" --description "Release ${label#release:}"
           done
           gh pr edit ${{ github.event.pull_request.number }} --add-label "release:${{ steps.plan.outputs.bump }}"
 
@@ -111,20 +116,99 @@ jobs:
 
       - name: Create or update release branch PR
         if: steps.plan.outputs.should_release == 'true' && github.event.pull_request.head.repo.fork == false
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          base: main
-          branch: ${{ steps.plan.outputs.release_branch }}
-          title: "chore: release v${{ steps.plan.outputs.version }}"
-          body-path: ${{ steps.plan.outputs.pr_body_path }}   # FIX: riga valida; rimosso testo d’errore incollato
-          commit-message: "chore: prepare release v${{ steps.plan.outputs.version }}"
-          add-paths: |
-            ReleaseNotes/**
-          delete-branch: false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          branch="${{ steps.plan.outputs.release_branch }}"
+          version="${{ steps.plan.outputs.version }}"
+          release_notes_path="${{ steps.plan.outputs.release_notes_path }}"
+          plan_path=".github/release-plan.json"
+          pr_body_path="${{ steps.plan.outputs.pr_body_path }}"
+          base_ref="${{ github.event.pull_request.base.ref }}"
+
+          tmp_dir=$(mktemp -d)
+          trap 'rm -rf "$tmp_dir"' EXIT
+
+          if [ ! -f "$release_notes_path" ]; then
+            echo "::error::File di release notes assente: $release_notes_path" >&2
+            exit 1
+          fi
+          if [ ! -f "$plan_path" ]; then
+            echo "::error::File di piano release assente: $plan_path" >&2
+            exit 1
+          fi
+          if [ ! -f "$pr_body_path" ]; then
+            echo "::error::File del corpo PR assente: $pr_body_path" >&2
+            exit 1
+          fi
+
+          cp "$release_notes_path" "$tmp_dir/release-notes.md"
+          cp "$plan_path" "$tmp_dir/release-plan.json"
+          cp "$pr_body_path" "$tmp_dir/pr-body.md"
+
+          rm -f "$release_notes_path" "$plan_path" "$pr_body_path"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin "$base_ref"
+
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git fetch origin "$branch"
+            starting_point="origin/$branch"
+            branch_exists=1
+          else
+            starting_point="origin/$base_ref"
+            branch_exists=0
+          fi
+
+          git checkout -B "$branch" "$starting_point"
+
+          mkdir -p "$(dirname "$release_notes_path")"
+          cp "$tmp_dir/release-notes.md" "$release_notes_path"
+
+          mkdir -p "$(dirname "$plan_path")"
+          cp "$tmp_dir/release-plan.json" "$plan_path"
+
+          mkdir -p "$(dirname "$pr_body_path")"
+          cp "$tmp_dir/pr-body.md" "$pr_body_path"
+
+          git add "$release_notes_path" "$plan_path"
+
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da pubblicare sul branch di release."
+            if [ "$branch_exists" -eq 0 ]; then
+              echo "Il branch $branch non esiste ancora, salto la creazione della PR."
+              exit 0
+            fi
+          else
+            git commit -m "chore: prepare release v${version}"
+            git push --force-with-lease origin "$branch"
+            branch_exists=1
+          fi
+
+          if [ "$branch_exists" -eq 0 ]; then
+            exit 0
+          fi
+
+          pr_number=$(gh pr view --head "$branch" --json number --jq '.number' 2>/dev/null || true)
+
+          if [ -n "$pr_number" ]; then
+            gh pr edit "$pr_number" \
+              --title "chore: release v${version}" \
+              --body-file "$pr_body_path"
+          else
+            gh pr create \
+              --base "$base_ref" \
+              --head "$branch" \
+              --title "chore: release v${version}" \
+              --body-file "$pr_body_path"
+          fi
 
   sync-release-branch:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/v')
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/v') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
