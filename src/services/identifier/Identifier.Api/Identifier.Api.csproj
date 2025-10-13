@@ -10,6 +10,7 @@
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>
   <ItemGroup>
     <Protobuf Include="../../../../contracts/identifier/authentication.proto" GrpcServices="Server" Link="Protos/authentication.proto" />

@@ -7,8 +7,13 @@
   <ItemGroup>
     <PackageReference Include="Dapr.AspNetCore" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
     <PackageReference Include="OpenFeature" />
+    <PackageReference Include="OpenFeature.Hosting" />
+    <PackageReference Include="OpenFeature.DependencyInjection" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../WebBackendCore.Application/WebBackendCore.Application.csproj" />

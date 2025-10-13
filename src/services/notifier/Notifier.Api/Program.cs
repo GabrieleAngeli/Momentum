@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR;
 using Notifier.Application.Dispatching;
 using Notifier.Infrastructure.Channels;
 using OpenTelemetry.Metrics;
