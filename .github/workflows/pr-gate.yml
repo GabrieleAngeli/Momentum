@@ -49,7 +49,7 @@ jobs:
         run: dotnet restore Momentum.sln
 
       - name: Build .NET Release
-        run: dotnet build Momentum.sln -c Release --no-restore  --framework net8.0
+        run: dotnet build Momentum.sln -c Release --no-restore
 
       - name: Setup Node
         uses: actions/setup-node@v4
