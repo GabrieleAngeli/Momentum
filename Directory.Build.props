@@ -18,6 +18,7 @@
     <AspNetCoreVersion>8.0.20</AspNetCoreVersion>
     <DotNetExtensionsVersion>9.0.4</DotNetExtensionsVersion>
     <OpenTelemetryVersion>1.11.2</OpenTelemetryVersion>
+    <OpenTelemetryVersionRev>1.12.0</OpenTelemetryVersionRev>
     <TestContainersVersion>4.4.0</TestContainersVersion>
     <MEAIVersion>9.5.0</MEAIVersion>
     <IsPackable>false</IsPackable>
