@@ -16,13 +16,12 @@
     <PackageReference Include="Grpc.Tools" PrivateAssets="All" GeneratePathProperty="true" />
   </ItemGroup>
 
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(PkgGrpc_Tools)' != ''">
     <!-- 1) imposta la base degli strumenti -->
-    <Protobuf_Tools_Path>$(PkgGrpc_Tools)\tools</Protobuf_Tools_Path>
-    <!-- 2) imposta il binario completo (Windows) -->
-    <Protobuf_ProtocFullPath Condition="'$(OS)'=='Windows_NT'">$(PkgGrpc_Tools)\tools\windows_x64\protoc.exe</Protobuf_ProtocFullPath>
-    <Protobuf_ProtocFullPath Condition="'$(OS)'!='Windows_NT'">$(PkgGrpc_Tools)\tools\linux_x64\protoc</Protobuf_ProtocFullPath>
-    
+    <Protobuf_Tools_Path>$(PkgGrpc_Tools)/tools</Protobuf_Tools_Path>
+    <!-- 2) imposta il binario completo in base al sistema operativo -->
+    <Protobuf_ProtocFullPath Condition="'$(OS)'=='Windows_NT'">$(PkgGrpc_Tools)/tools/windows_x64/protoc.exe</Protobuf_ProtocFullPath>
+    <Protobuf_ProtocFullPath Condition="'$(OS)'!='Windows_NT'">$(PkgGrpc_Tools)/tools/linux_x64/protoc</Protobuf_ProtocFullPath>
   </PropertyGroup>
   <ItemGroup>
     <Protobuf Include="../../../../contracts/identifier/authentication.proto" GrpcServices="Server" Link="Protos/authentication.proto" />
