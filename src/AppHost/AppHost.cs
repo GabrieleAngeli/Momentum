@@ -1,6 +1,7 @@
 
 
 using Aspire.Hosting;
+using Microsoft.Extensions.Hosting;
 
 // Test di integrazione e verifica funzionamento CI/CD
 
@@ -62,26 +63,28 @@ var tempo = builder.AddContainer("tempo-momentum", "grafana/tempo", "main-ed2862
     .WithArgs("--config.file=/etc/tempo/tempo.yaml")
     .WithBindMount("./mounts/tempo/data", "/var/tempo");
 
-// var identifier = builder.AddProject<Projects.Identifier_Api>("identifier-api")
-//     .WithDaprSidecar()
-//     .WithReference(kafka);
+var identifier = builder.AddProject<Projects.Identifier_Api>("identifier-api")
+    .WithDaprSidecar()
+    .WithReference(kafka);
 
-// var streamer = builder.AddProject<Projects.Streamer_Api>("streamer-api")
-//     .WithDaprSidecar()
-//     .WithReference(kafka)
-//     .WithReference(timescale)
-//     .WithEnvironment("ConnectionStrings__Timescale", "Host=timescale;Username=postgres;Password=postgres;Database=momentum");
+var streamer = builder.AddProject<Projects.Streamer_Api>("streamer-api")
+    .WithDaprSidecar()
+    .WithReference(kafka)
+    .WithReference(timescale)
+    .WithEnvironment("ConnectionStrings__Timescale", "Host=timescale;Username=postgres;Password=postgres;Database=momentum");
 
-// var notifier = builder.AddProject<Projects.Notifier_Api>("notifier-api")
-//     .WithDaprSidecar()
-//     .WithReference(kafka);
+var notifier = builder.AddProject<Projects.Notifier_Api>("notifier-api")
+    .WithDaprSidecar()
+    .WithReference(kafka);
 
-// var backend = builder.AddProject<Projects.WebBackendCore_Api>("web-backend-core")
-//     .WithDaprSidecar();
+var backend = builder.AddProject<Projects.WebBackendCore_Api>("web-backend-core")
+    .WithDaprSidecar();
 
-// var angular = builder.AddNpmApp("web-core", "src/web-core")
-//     .WithEnvironment("NG_FORCE_TTY", "0")
-//     .WithHttpEndpoint(port: 4200, targetPort: 4200);
+var angular = builder.AddExecutable("web-core", "npm", "run", "start")
+    .WithWorkingDirectory("../src/web-core")
+    .WithHttpEndpoint(port: 4200, targetPort: 4200, isProxied: false);
+    //.WithExternalHttpEndpoints()
+    //.PublishAsDockerFile();
 
 // var frontend = builder.AddNpmApp("frontend", "../NodeFrontend", "watch")
 //     .WithReference(weatherapi)
@@ -92,11 +95,11 @@ var tempo = builder.AddContainer("tempo-momentum", "grafana/tempo", "main-ed2862
 //     .WithExternalHttpEndpoints()
 //     .PublishAsDockerFile();
 
-// var launchProfile = builder.Configuration["DOTNET_LAUNCH_PROFILE"];
+var launchProfile = builder.Configuration["DOTNET_LAUNCH_PROFILE"];
 
-// if (builder.Environment.IsDevelopment() && launchProfile == "https")
-// {
-//     angular.RunWithHttpsDevCertificate("HTTPS_CERT_FILE", "HTTPS_CERT_KEY_FILE");
-// }
+if (builder.Environment.IsDevelopment() && launchProfile == "https")
+{
+    angular.RunWithHttpsDevCertificate("HTTPS_CERT_FILE", "HTTPS_CERT_KEY_FILE");
+}
 
 builder.Build().Run();

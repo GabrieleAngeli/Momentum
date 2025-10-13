@@ -27,6 +27,8 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
+builder.Services.AddDaprClient();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapGrpcService<IdentifierGrpcService>();

@@ -9,6 +9,8 @@ using Streamer.Infrastructure.Ingestion;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddDaprClient();
+
 builder.Services.AddGrpc();
 builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection("Kafka"));
 builder.Services.AddSingleton<ITelemetryRepository, TimescaleTelemetryRepository>();

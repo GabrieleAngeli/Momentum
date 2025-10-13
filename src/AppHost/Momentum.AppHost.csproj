@@ -15,5 +15,16 @@
     <PackageReference Include="Aspire.Hosting.Kafka" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
     <PackageReference Include="Aspire.Hosting.Azure.Redis" />
+    <PackageReference Include="Aspire.Hosting.NodeJs"/>
+
+    <ProjectReference Include="..\services\identifier\identifier.Api\Identifier.Api.csproj" />
+    <ProjectReference Include="..\services\streamer\streamer.Api\Streamer.Api.csproj" />
+    <ProjectReference Include="..\services\notifier\notifier.Api\Notifier.Api.csproj" />
+    <ProjectReference Include="..\services\web-backend-core\WebBackendCore.Api\WebBackendCore.Api.csproj" />
+
+    <Compile Include="..\shared\DevCertHostingExtensions.cs" Link="DevCertHostingExtensions.cs" />
   </ItemGroup>
+
+
+
 </Project>

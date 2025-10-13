@@ -8,6 +8,8 @@ using OpenTelemetry.Trace;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDaprClient();
+
+builder.Services.AddDaprClient();
 builder.Services.AddSingleton<INotificationChannel, EmailNotificationChannel>();
 builder.Services.AddSingleton<INotificationChannel, SignalRNotificationChannel>();
 builder.Services.AddSingleton<DispatchNotificationHandler>();
