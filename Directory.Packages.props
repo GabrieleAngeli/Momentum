@@ -24,8 +24,8 @@
   <ItemGroup Label="Core Packages">
     <PackageVersion Include="Apache.Ignite" Version="3.0.0" />
     <PackageVersion Include="Confluent.Kafka" Version="2.12.0" />
-    <PackageVersion Include="Grpc.AspNetCore" Version="2.71.0" />
-    <PackageVersion Include="Grpc.Tools" Version="2.71.0" />
+    <PackageVersion Include="Grpc.AspNetCore" Version="2.64.0" />
+    <PackageVersion Include="Grpc.Tools" Version="2.64.0" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Npgsql" Version="9.0.4" />
 

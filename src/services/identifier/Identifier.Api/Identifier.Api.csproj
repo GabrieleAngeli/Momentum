@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Dapr.AspNetCore" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
@@ -13,8 +12,18 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
-    <PackageReference Include="Grpc.Tools" PrivateAssets="All" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="All" GeneratePathProperty="true" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <!-- 1) imposta la base degli strumenti -->
+    <Protobuf_Tools_Path>$(PkgGrpc_Tools)\tools</Protobuf_Tools_Path>
+    <!-- 2) imposta il binario completo (Windows) -->
+    <Protobuf_ProtocFullPath Condition="'$(OS)'=='Windows_NT'">$(PkgGrpc_Tools)\tools\windows_x64\protoc.exe</Protobuf_ProtocFullPath>
+    <Protobuf_ProtocFullPath Condition="'$(OS)'!='Windows_NT'">$(PkgGrpc_Tools)\tools\linux_x64\protoc</Protobuf_ProtocFullPath>
+    
+  </PropertyGroup>
   <ItemGroup>
     <Protobuf Include="../../../../contracts/identifier/authentication.proto" GrpcServices="Server" Link="Protos/authentication.proto" />
   </ItemGroup>
