@@ -16,13 +16,12 @@
     <PackageReference Include="Grpc.Tools" PrivateAssets="All" GeneratePathProperty="true" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(PackageVersion_Grpc_Tools)' != '' and '$(NuGetPackageRoot)' != ''">
+  <PropertyGroup Condition="'$(PkgGrpc_Tools)' != ''">
     <!-- 1) imposta la base degli strumenti -->
-    <GrpcTools_PackageRoot>$([System.IO.Path]::Combine('$(NuGetPackageRoot)', 'grpc.tools', '$(PackageVersion_Grpc_Tools)'))</GrpcTools_PackageRoot>
-    <Protobuf_Tools_Path>$([System.IO.Path]::Combine('$(GrpcTools_PackageRoot)', 'tools'))</Protobuf_Tools_Path>
+    <Protobuf_Tools_Path>$(PkgGrpc_Tools)/tools</Protobuf_Tools_Path>
     <!-- 2) imposta il binario completo in base al sistema operativo -->
-    <Protobuf_ProtocFullPath Condition="'$(OS)'=='Windows_NT'">$([System.IO.Path]::Combine('$(Protobuf_Tools_Path)', 'windows_x64', 'protoc.exe'))</Protobuf_ProtocFullPath>
-    <Protobuf_ProtocFullPath Condition="'$(OS)'!='Windows_NT'">$([System.IO.Path]::Combine('$(Protobuf_Tools_Path)', 'linux_x64', 'protoc'))</Protobuf_ProtocFullPath>
+    <Protobuf_ProtocFullPath Condition="'$(OS)'=='Windows_NT'">$(PkgGrpc_Tools)/tools/windows_x64/protoc.exe</Protobuf_ProtocFullPath>
+    <Protobuf_ProtocFullPath Condition="'$(OS)'!='Windows_NT'">$(PkgGrpc_Tools)/tools/linux_x64/protoc</Protobuf_ProtocFullPath>
   </PropertyGroup>
   <ItemGroup>
     <Protobuf Include="../../../../contracts/identifier/authentication.proto" GrpcServices="Server" Link="Protos/authentication.proto" />
