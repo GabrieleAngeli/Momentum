@@ -1,4 +1,5 @@
 using Dapr.Client;
+using Microsoft.Extensions.Logging;
 using Streamer.Application.Ingestion;
 using Streamer.Domain.Entities;
 
