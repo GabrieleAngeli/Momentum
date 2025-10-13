@@ -2,6 +2,8 @@
 
 using Aspire.Hosting;
 
+// Test di integrazione e verifica funzionamento CI/CD
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 
