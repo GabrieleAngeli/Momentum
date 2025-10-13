@@ -4,8 +4,7 @@
   <PropertyGroup>
     
     <DefaultTargetFramework>net8.0</DefaultTargetFramework>
-    <TargetFrameworks>$(DefaultTargetFramework)</TargetFrameworks>
-    <AllTargetFrameworks>$(DefaultTargetFramework);net9.0</AllTargetFrameworks>
+    <TargetFramework>$(DefaultTargetFramework)</TargetFramework>
     <LangVersion>latest</LangVersion>
 
     <ImplicitUsings>enable</ImplicitUsings>
