@@ -13,6 +13,7 @@
 **English:**
 - **web-core (Angular):** shell consuming SignalR and federated modules.
 - **web-backend-core (.NET):** API gateway + SignalR hub + OpenFeature integration.
+- **modular-monolith (.NET):** Unified façade invoking all services via Dapr.
 - **identifier service:** gRPC auth, JWT minting.
 - **streamer service:** Kafka consumer, TimescaleDB persistence, Ignite cache.
 - **notifier service:** Subscribes to `telemetry.ingested`, dispatches email/SignalR.
@@ -21,6 +22,7 @@
 **Italiano:**
 - **web-core (Angular):** shell che consuma SignalR e moduli federati.
 - **web-backend-core (.NET):** API gateway + hub SignalR + integrazione OpenFeature.
+- **modular-monolith (.NET):** Facciata unificata che invoca tutti i servizi tramite Dapr.
 - **identifier service:** autenticazione gRPC, emissione JWT.
 - **streamer service:** consumer Kafka, persistenza TimescaleDB, cache Ignite.
 - **notifier service:** si sottoscrive a `telemetry.ingested`, inoltra email/SignalR.

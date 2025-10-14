@@ -80,6 +80,13 @@ var notifier = builder.AddProject<Projects.Notifier_Api>("notifier-api")
 var backend = builder.AddProject<Projects.WebBackendCore_Api>("web-backend-core")
     .WithDaprSidecar();
 
+var modularMonolith = builder.AddProject<Projects.ModularMonolith_Api>("modular-monolith")
+    .WithDaprSidecar()
+    .WithReference(identifier)
+    .WithReference(streamer)
+    .WithReference(notifier)
+    .WithReference(backend);
+
 var angular = builder.AddExecutable("web-core", "npm", "run", "start")
     .WithWorkingDirectory("../src/web-core")
     .WithHttpEndpoint(port: 4200, targetPort: 4200, isProxied: false);

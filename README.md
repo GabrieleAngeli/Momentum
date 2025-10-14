@@ -60,6 +60,7 @@ dotnet run --project src/AppHost/Momentum.AppHost.csproj
 | streamer | Telemetry ingestion from Kafka → Timescale/Ignite |
 | notifier | Multi-channel notification dispatch |
 | web-backend-core | API gateway + SignalR hub |
+| modular-monolith | Aggregates all backend capabilities via Dapr |
 | web-core | Modular Angular frontend |
 
 **Italiano:**
@@ -69,6 +70,7 @@ dotnet run --project src/AppHost/Momentum.AppHost.csproj
 | streamer | Ingest telemetria da Kafka → Timescale/Ignite |
 | notifier | Invio notifiche multi-canale |
 | web-backend-core | Gateway API + hub SignalR |
+| modular-monolith | Aggrega tutte le capability backend tramite Dapr |
 | web-core | Frontend modulare Angular |
 
 ## End-to-end flow / Flusso end-to-end

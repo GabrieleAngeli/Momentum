@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Dapr.Client" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ModularMonolith.Application/ModularMonolith.Application.csproj" />
+    <ProjectReference Include="../ModularMonolith.Domain/ModularMonolith.Domain.csproj" />
+  </ItemGroup>
+</Project>
