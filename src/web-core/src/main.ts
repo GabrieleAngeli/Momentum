@@ -4,13 +4,24 @@ import { provideRouter } from '@angular/router';
 import { AppComponent } from './app/app.component';
 import { APP_ROUTES } from './app/app.routes';
 import { provideAnimations } from '@angular/platform-browser/animations';
-import { provideTranslations } from './app/i18n.provider';
+import { importProvidersFrom } from '@angular/core';
+import { TranslateModule } from '@ngx-translate/core';
+import { provideTranslateHttpLoader } from '@ngx-translate/http-loader';
 
 bootstrapApplication(AppComponent, {
   providers: [
     provideRouter(APP_ROUTES),
     provideHttpClient(withInterceptorsFromDi()),
     provideAnimations(),
-    provideTranslations()
+    importProvidersFrom(
+      TranslateModule.forRoot({
+        lang: 'en',
+        fallbackLang: 'en',
+        loader: provideTranslateHttpLoader({
+          prefix: '/assets/i18n/',
+          suffix: '.json'
+        })
+      })
+    )
   ]
 }).catch(err => console.error(err));

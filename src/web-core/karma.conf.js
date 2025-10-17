@@ -16,9 +16,14 @@ module.exports = function (config) {
     coverageReporter: {
       dir: require('path').join(__dirname, './coverage'),
       subdir: '.',
-      reporters: [{ type: 'html' }, { type: 'text-summary' }]
+      reporters: [
+        { type: 'html' }, 
+        { type: 'text-summary' },
+        { type: 'cobertura', file: 'cobertura-coverage.xml' },
+        { type: 'lcovonly', file: 'lcov.info' }
+      ]
     },
-    reporters: ['progress', 'kjhtml'],
+    reporters: ['progress', 'kjhtml', 'coverage'],
     browsers: ['ChromeHeadless'],
     restartOnFileChange: true
   });

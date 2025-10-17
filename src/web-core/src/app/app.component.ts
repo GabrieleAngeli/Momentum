@@ -1,16 +1,16 @@
 import { Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { TranslateService } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet],
+  imports: [RouterOutlet,TranslateModule],
   template: `
     <div class="shell">
       <header>
         <h1>{{ 'app.title' | translate }}</h1>
-        <select (change)="changeLocale($event.target.value)">
+        <select #sel  (change)="changeLocale(sel.value)">
           <option value="en">English</option>
           <option value="it">Italiano</option>
         </select>

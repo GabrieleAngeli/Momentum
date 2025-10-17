@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR;
 using Notifier.Application.Dispatching;
 using Notifier.Infrastructure.Channels;
 using OpenTelemetry.Metrics;
@@ -5,6 +6,8 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDaprClient();
 
 builder.Services.AddDaprClient();
 builder.Services.AddSingleton<INotificationChannel, EmailNotificationChannel>();

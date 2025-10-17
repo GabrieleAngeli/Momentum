@@ -1,4 +1,4 @@
-import { AsyncPipe, CommonModule } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, effect, inject, signal } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { TelemetryService } from '../../services/telemetry.service';
@@ -6,7 +6,7 @@ import { TelemetryService } from '../../services/telemetry.service';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, AsyncPipe, TranslateModule],
+  imports: [CommonModule, TranslateModule],
   providers: [TelemetryService],
   template: `
     <section>

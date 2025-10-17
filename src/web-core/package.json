@@ -10,34 +10,38 @@
     "e2e": "ng e2e"
   },
   "dependencies": {
+    "@angular-architects/module-federation": "^19.0.3",
     "@angular/animations": "^19.0.0",
     "@angular/common": "^19.0.0",
     "@angular/compiler": "^19.0.0",
     "@angular/core": "^19.0.0",
     "@angular/forms": "^19.0.0",
+    "@angular/localize": "^19.0.0",
     "@angular/platform-browser": "^19.0.0",
     "@angular/platform-browser-dynamic": "^19.0.0",
     "@angular/router": "^19.0.0",
-    "@angular/localize": "^19.0.0",
-    "@ngx-translate/core": "^17.0.0",
-    "@ngx-translate/http-loader": "^17.0.0",
+    "@microsoft/signalr": "^8.0.0",
     "rxjs": "^7.8.1",
     "tslib": "^2.6.2",
-    "zone.js": "~0.15.0",
-    "@microsoft/signalr": "^8.0.0",
-    "@angular-architects/module-federation": "^19.0.3"
+    "web-core": "file:",
+    "zone.js": "~0.15.0"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^19.0.0",
     "@angular/cli": "^19.0.0",
     "@angular/compiler-cli": "^19.0.0",
+    "@ngx-translate/core": "^17.0.0",
+    "@ngx-translate/http-loader": "^17.0.0",
     "@types/jasmine": "~5.1.0",
+    "angular-eslint": "20.4.0",
+    "eslint": "^9.37.0",
     "jasmine-core": "~5.1.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
-    "typescript": "~5.5.0"
+    "typescript": "~5.5.0",
+    "typescript-eslint": "8.46.0"
   }
 }

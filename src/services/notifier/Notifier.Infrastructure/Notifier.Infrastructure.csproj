@@ -9,6 +9,7 @@
     <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="Azure.Communication.Email" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Notifier.Application/Notifier.Application.csproj" />

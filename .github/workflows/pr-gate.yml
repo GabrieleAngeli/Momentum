@@ -2,14 +2,8 @@ name: PR Gate
 
 on:
   pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-      - labeled
-    branches:
-      - main
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    branches: [main]
 
 permissions:
   contents: write
@@ -26,8 +20,7 @@ jobs:
         image: timescale/timescaledb:2.14.0-pg16
         env:
           POSTGRES_PASSWORD: postgres
-        ports:
-          - "5432:5432"
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres"
           --health-interval 10s
@@ -62,8 +55,30 @@ jobs:
       - name: Lint web-core
         run: npm run lint --prefix src/web-core
 
-      - name: Test web-core
-        run: npm test --prefix src/web-core -- --watch=false
+      - name: Test web-core with coverage
+        run: npm test --prefix src/web-core -- --watch=false --code-coverage
+
+      - name: Upload coverage artifact (FE)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-core-coverage
+          path: src/web-core/coverage
+
+      # (Opzionale) Pubblica in Codecov
+      - uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
+          flags: frontend
+
+      # FACOLTATIVO: valida gli schemi JSON (toglie il || true dallo script)
+      - name: Validate JSON Schemas (AJV)
+        if: always()
+        run: |
+          npm i -g ajv-cli
+          chmod +x ./tests/Contracts/schema-validation.test.sh
+          ./tests/Contracts/schema-validation.test.sh
 
       - name: Upload contracts artifact
         uses: actions/upload-artifact@v4
@@ -75,8 +90,7 @@ jobs:
   test_dotnet:
     name: DotNet Tests and Audit
     runs-on: ubuntu-latest
-    needs:
-      - ci
+    needs: [ci]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,33 +100,63 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Test with trx
-        run: |
-          dotnet test Momentum.sln -c Release --no-build \
-            --logger "trx;LogFileName=test-results.trx" \
-            --results-directory ./test-results
+      - name: Restore .NET
+        run: dotnet restore Momentum.sln
 
-      - name: Publish Test Results to Checks
+      - name: Build .NET Release
+        run: dotnet build Momentum.sln -c Release --no-restore
+
+      - name: Test (.NET) with coverage (Coverlet)
+        run: |
+          mkdir -p ./test-results
+          mkdir -p ./test-results/coverage
+          dotnet test Momentum.sln -c Release \
+            --logger "trx" \
+            --results-directory ./test-results \
+            --collect:"XPlat Code Coverage"
+
+      - name: List results
+        if: always()
+        run: ls -R ./test-results || true
+
+      - name: Publish .NET test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: Unit Tests
-          path: test-results/*.trx
+          name: Unit & Integration (.NET)
+          path: ./test-results/**/*.trx
           reporter: dotnet-trx
 
-      - name: Upload Test Audit
+      # HTML summary / badge opzionali
+      - name: Generate coverage report (ReportGenerator)
+        run: |
+          dotnet tool update -g dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:"./test-results/**/coverage.cobertura.xml" \
+            -targetdir:"./test-results/coveragereport" \
+            -reporttypes:"Html;TextSummary"
+          cat ./test-results/coveragereport/Summary.txt || true
+
+      - name: Upload coverage artifact (.NET)
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-audit
-          path: test-results
-          retention-days: 30
+          name: dotnet-coverage
+          path: ./test-results/coveragereport
+
+      - uses: codecov/codecov-action@v4
+        with:
+          files: ./test-results/coverage/**/coverage.cobertura.xml
+          flags: backend
 
   issue_linking:
     name: Issue Linking Auto Create
     runs-on: ubuntu-latest
-    needs:
-      - ci
+    needs: [ci]
+    if: >
+      github.event_name == 'pull_request' &&
+      contains(fromJson('["opened","reopened","ready_for_review","labeled"]'), github.event.action) &&
+      !github.event.pull_request.draft
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,8 +187,7 @@ jobs:
   pr_doc_autopilot:
     name: PR Doc Autopilot Commit Push
     runs-on: ubuntu-latest
-    needs:
-      - ci
+    needs: [ci]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -157,13 +200,18 @@ jobs:
           python-version: "3.11"
 
       - name: Run PR Codex Autopilot
+        if: ${{ github.event.pull_request.head.repo.fork == false }}
+        continue-on-error: true   # <— non bloccare il job in caso di skip/limiti
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MODEL: gpt-4o-mini
+          MAX_DIFF_CHARS: "60000"
+          MAX_CONTEXT_CHARS: "8000"
+          MAX_BODY_CHARS: "3000"
         run: |
           python -m pip install -U pip
-          if [ -f tools/ci/requirements.txt ]; then
-            pip install -r tools/ci/requirements.txt
-          fi
+          pip install -r tools/ci/requirements.txt
           python tools/ci/pr_codex_autopilot.py \
             --pr "${{ github.event.pull_request.number }}" \
             --repo "${{ github.repository }}"
@@ -191,9 +239,7 @@ jobs:
   release_notes_preview:
     name: Release Notes Preview Comment
     runs-on: ubuntu-latest
-    needs:
-      - ci
-      - test_dotnet
+    needs: [ci, test_dotnet]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -224,9 +270,7 @@ jobs:
               const bucket = groups[type] || groups['chore'];
               bucket.push('- ' + msg + ' (' + c.sha.substring(0,7) + ')');
             }
-            function section(t, l) {
-              return l.length ? ('### ' + t + '\n' + l.join('\n') + '\n') : '';
-            }
+            function section(t, l) { return l.length ? ('### ' + t + '\n' + l.join('\n') + '\n') : ''; }
             const body =
               section('Features', groups.feat) +
               section('Fixes', groups.fix) +
@@ -244,11 +288,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body = `${{ toJson(steps.notes.outputs.body) }}`;
             const prNumber = context.payload.pull_request.number;
-            // strip the outer quotes produced by toJson
+            const body = `${{ toJson(steps.notes.outputs.body) }}`;
             const cleaned = body.startsWith('"') ? body.slice(1, -1).replace(/\\"/g, '"') : body;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: prNumb_
+              issue_number: prNumber,
+              body: cleaned
+            });

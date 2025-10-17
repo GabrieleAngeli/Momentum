@@ -4,8 +4,7 @@
   <PropertyGroup>
     
     <DefaultTargetFramework>net8.0</DefaultTargetFramework>
-    <TargetFrameworks>$(DefaultTargetFramework)</TargetFrameworks>
-    <AllTargetFrameworks>$(DefaultTargetFramework);net9.0</AllTargetFrameworks>
+    <TargetFramework>$(DefaultTargetFramework)</TargetFramework>
     <LangVersion>latest</LangVersion>
 
     <ImplicitUsings>enable</ImplicitUsings>
@@ -18,6 +17,8 @@
     <AspNetCoreVersion>8.0.20</AspNetCoreVersion>
     <DotNetExtensionsVersion>9.0.4</DotNetExtensionsVersion>
     <OpenTelemetryVersion>1.11.2</OpenTelemetryVersion>
+    <OpenTelemetryVersionRev>1.12.0</OpenTelemetryVersionRev>
+    <OpenFeatureVersion>2.8.1</OpenFeatureVersion>
     <TestContainersVersion>4.4.0</TestContainersVersion>
     <MEAIVersion>9.5.0</MEAIVersion>
     <IsPackable>false</IsPackable>
