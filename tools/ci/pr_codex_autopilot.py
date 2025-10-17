@@ -38,6 +38,14 @@ MAX_BODY_CHARS = 6000
 
 # ---------- utils ----------
 
+def shrink_prompt(user_prompt: str, factor: float) -> str:
+    """Ritaglia le sezioni lunghe del prompt mantenendo il formato."""
+    # Taglia alla fine, lasciando un marker.
+    keep = max(1000, int(len(user_prompt) * factor))
+    if len(user_prompt) <= keep:
+        return user_prompt
+    return user_prompt[:keep] + "\n\n[...prompt truncated to reduce tokens...]\n"
+
 def run_command(args: List[str], *, cwd: Path | None = None, check: bool = True, capture_output: bool = True) -> Tuple[int, str, str]:
     result = subprocess.run(args, cwd=str(cwd) if cwd else None, check=False, capture_output=capture_output, text=True)
     if check and result.returncode != 0:
@@ -173,30 +181,83 @@ def collect_commit_subjects(max_count: int = 20) -> str:
 
 def call_model(system_prompt: str, user_prompt: str) -> Dict:
     provider = os.environ.get("CODEX_PROVIDER", "openai").lower()
-    model = os.environ.get("MODEL", "gpt-4.1")
+    model = os.environ.get("MODEL", "gpt-4o-mini")  # fallback più “leggero”
+
+    def _success_empty() -> Dict:
+        # Output vuoto ma valido: non blocca la pipeline
+        return {
+            "pr_summary": "",
+            "change_types": [],
+            "affected_modules": [],
+            "breaking_changes": "",
+            "migrations": "",
+            "semver_suggestion": "patch",
+            "security_notes": "",
+            "testing_updates": "",
+            "observability_updates": "",
+            "labels": [],
+            "reviewers": [],
+            "checklist": [],
+            "changelog_entry": "",
+            "adr": {},
+            "doc_patches": [],
+        }
+
+    # ramo OpenAI SDK
     if provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY is required when CODEX_PROVIDER=openai")
-        base_url = os.environ.get("OPENAI_BASE_URL")
-        from openai import OpenAI  # type: ignore
+        try:
+            from openai import OpenAI  # type: ignore
+        except ImportError as e:
+            raise RuntimeError("Python package 'openai' is not installed. Add `openai>=1.0.0` to tools/ci/requirements.txt.") from e
 
         client_kwargs: Dict[str, Any] = {"api_key": api_key}
+        base_url = os.environ.get("OPENAI_BASE_URL")
         if base_url:
             client_kwargs["base_url"] = base_url
         client = OpenAI(**client_kwargs)
-        response = client.chat.completions.create(
-            model=model,
-            temperature=0.2,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        content = response.choices[0].message.content
-        return parse_json_response(content)
+
+        prompt = user_prompt
+        # fino a 3 tentativi: se 429/too large → shrink e riprova
+        for attempt in range(3):
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    temperature=0.2,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                content = resp.choices[0].message.content
+                return parse_json_response(content)
+            except Exception as e:
+                msg = str(e).lower()
+                if "rate limit" in msg or "request too large" in msg or "tpm" in msg:
+                    # accorcia e ritenta
+                    factor = 0.6 if attempt == 0 else 0.4
+                    prompt = shrink_prompt(prompt, factor)
+                    time.sleep(2 + attempt * 2)
+                    continue
+                # altri errori: re-raise
+                raise
+        # non riuscito dopo i retry → non bloccare la pipeline
+        print("[doc-autopilot] Model call failed due to limits after retries. Skipping doc generation.", file=sys.stderr)
+        return _success_empty()
+
+    # ramo HTTP compatibile
     if provider in {"http", "self_hosted", "compat"}:
-        return call_http_compatible_model(model, system_prompt, user_prompt)
+        try:
+            return call_http_compatible_model(model, system_prompt, user_prompt)
+        except Exception as e:
+            msg = str(e).lower()
+            if "rate limit" in msg or "too large" in msg:
+                # un solo shrink anche qui
+                return call_http_compatible_model(model, system_prompt, shrink_prompt(user_prompt, 0.5))
+            raise
+
     raise RuntimeError(f"Unsupported CODEX_PROVIDER '{provider}'")
 
 def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str) -> Dict:
