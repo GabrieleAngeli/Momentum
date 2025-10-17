@@ -8,10 +8,10 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
-
 from zoneinfo import ZoneInfo
 
 import requests
@@ -36,33 +36,84 @@ MAX_CONTEXT_CHARS = 16000
 MAX_DIFF_CHARS = 120000
 MAX_BODY_CHARS = 6000
 
-
-def load_event() -> Dict:
-    event_path = os.environ.get("GITHUB_EVENT_PATH")
-    if not event_path:
-        raise RuntimeError("GITHUB_EVENT_PATH is not defined")
-    with open(event_path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
-
+# ---------- utils ----------
 
 def run_command(args: List[str], *, cwd: Path | None = None, check: bool = True, capture_output: bool = True) -> Tuple[int, str, str]:
-    result = subprocess.run(
-        args,
-        cwd=str(cwd) if cwd else None,
-        check=False,
-        capture_output=capture_output,
-        text=True,
-    )
+    result = subprocess.run(args, cwd=str(cwd) if cwd else None, check=False, capture_output=capture_output, text=True)
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(result.returncode, args, result.stdout, result.stderr)
     return result.returncode, result.stdout, result.stderr
 
-
 def truncate(text: str, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    return text[: limit - 3] + "..."
+    return text if len(text) <= limit else text[: limit - 3] + "..."
 
+def load_prompt_template(path: Path) -> str:
+    if not path.exists():
+        raise FileNotFoundError(f"Prompt template missing: {path}")
+    return path.read_text(encoding="utf-8")
+
+def render_user_prompt(template: str, values: Dict[str, str]) -> str:
+    prompt = template
+    for key, value in values.items():
+        prompt = prompt.replace(f"{{{{{key}}}}}", value)
+    return prompt
+
+# ---------- GH event / REST ----------
+
+def load_event() -> Dict | None:
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path or not os.path.isfile(event_path):
+        return None
+    with open(event_path, "r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+def gh_get(url: str, token: str, *, params: Dict[str, Any] | None = None, max_wait: int = 300) -> Dict:
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    while True:
+        r = requests.get(url, headers=headers, params=params, timeout=60)
+        if r.status_code == 403 and "rate limit" in r.text.lower():
+            reset = int(r.headers.get("x-ratelimit-reset", "0"))
+            now = int(time.time())
+            wait = max(5, min(max_wait, reset - now + 2)) if reset > now else 60
+            print(f"[doc-autopilot] Rate limit hit. Sleeping {wait}s…", file=sys.stderr)
+            time.sleep(wait)
+            continue
+        r.raise_for_status()
+        return r.json()
+
+def gh_post_or_patch(url: str, token: str, payload: Dict[str, Any], method: str = "POST") -> Dict:
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    func = requests.post if method.upper() == "POST" else requests.patch
+    r = func(url, headers=headers, json=payload, timeout=60)
+    if r.status_code >= 400:
+        raise RuntimeError(f"GitHub API error {r.status_code}: {truncate(r.text, 800)}")
+    return r.json()
+
+def load_pr_from_event_or_api(args) -> Dict:
+    # 1) prova evento
+    event = load_event()
+    if event and "pull_request" in event:
+        return event["pull_request"]
+
+    # 2) via REST usando args/env
+    repo = args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
+    pr_num = args.pr or os.environ.get("PR_NUMBER") or os.environ.get("GITHUB_PR_NUMBER")
+    token = args.token or os.environ.get("GITHUB_TOKEN")
+    if not repo or not pr_num or not token:
+        raise RuntimeError("Missing inputs: need repo, pr number and GITHUB_TOKEN (via args or env).")
+    pr_num = int(pr_num)
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"
+    return gh_get(url, token)
+
+# ---------- repo context ----------
 
 def collect_repository_context(touched_modules: Iterable[str]) -> str:
     sections: List[str] = []
@@ -96,7 +147,6 @@ def collect_repository_context(touched_modules: Iterable[str]) -> str:
             sections.append(f"### modules/{module}/README.md\n" + truncate(content, MAX_CONTEXT_CHARS // 6))
     return "\n\n".join(sections)
 
-
 def get_touched_modules_from_diff(diff_text: str) -> List[str]:
     modules: set[str] = set()
     for line in diff_text.splitlines():
@@ -108,57 +158,18 @@ def get_touched_modules_from_diff(diff_text: str) -> List[str]:
                     modules.add(parts[1])
     return sorted(modules)
 
-
-def export_metadata_to_env(pr: Dict) -> None:
-    github_env = os.environ.get("GITHUB_ENV")
-    if not github_env:
-        return
-    with open(github_env, "a", encoding="utf-8") as handle:
-        handle.write(f"PR_NUMBER={pr['number']}\n")
-        handle.write(f"PR_TITLE<<EOF\n{pr['title']}\nEOF\n")
-        body = pr.get("body") or ""
-        handle.write(f"PR_BODY<<EOF\n{body}\nEOF\n")
-        handle.write(f"PR_AUTHOR={pr['user']['login']}\n")
-        handle.write(f"PR_HEAD={pr['head']['ref']}\n")
-        handle.write(f"PR_BASE={pr['base']['ref']}\n")
-
-
 def fetch_branches(base_ref: str) -> None:
     run_command(["git", "fetch", "origin", base_ref], cwd=REPO_ROOT)
 
-
 def build_diff(base_ref: str) -> str:
-    _, diff_output, _ = run_command([
-        "git",
-        "diff",
-        f"origin/{base_ref}...HEAD",
-    ], cwd=REPO_ROOT)
+    _, diff_output, _ = run_command(["git", "diff", f"origin/{base_ref}...HEAD"], cwd=REPO_ROOT)
     return truncate(diff_output, MAX_DIFF_CHARS)
 
-
 def collect_commit_subjects(max_count: int = 20) -> str:
-    _, output, _ = run_command([
-        "git",
-        "log",
-        "--pretty=format:%s",
-        "HEAD",
-        f"-n{max_count}",
-    ], cwd=REPO_ROOT)
+    _, output, _ = run_command(["git", "log", "--pretty=format:%s", "HEAD", f"-n{max_count}"], cwd=REPO_ROOT)
     return output.strip()
 
-
-def load_prompt_template(path: Path) -> str:
-    if not path.exists():
-        raise FileNotFoundError(f"Prompt template missing: {path}")
-    return path.read_text(encoding="utf-8")
-
-
-def render_user_prompt(template: str, values: Dict[str, str]) -> str:
-    prompt = template
-    for key, value in values.items():
-        prompt = prompt.replace(f"{{{{{key}}}}}", value)
-    return prompt
-
+# ---------- model calls ----------
 
 def call_model(system_prompt: str, user_prompt: str) -> Dict:
     provider = os.environ.get("CODEX_PROVIDER", "openai").lower()
@@ -168,7 +179,7 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY is required when CODEX_PROVIDER=openai")
         base_url = os.environ.get("OPENAI_BASE_URL")
-        from openai import OpenAI
+        from openai import OpenAI  # type: ignore
 
         client_kwargs: Dict[str, Any] = {"api_key": api_key}
         if base_url:
@@ -188,13 +199,10 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
         return call_http_compatible_model(model, system_prompt, user_prompt)
     raise RuntimeError(f"Unsupported CODEX_PROVIDER '{provider}'")
 
-
 def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str) -> Dict:
     base = os.environ.get("CODEX_API_BASE")
     if not base:
-        raise RuntimeError(
-            "CODEX_API_BASE is required when CODEX_PROVIDER is set to an OpenAI-compatible HTTP mode"
-        )
+        raise RuntimeError("CODEX_API_BASE is required when CODEX_PROVIDER is set to an OpenAI-compatible HTTP mode")
     endpoint = base.rstrip("/")
     if not endpoint.endswith("/chat/completions"):
         endpoint = f"{endpoint}/v1/chat/completions"
@@ -213,13 +221,10 @@ def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str)
     }
     response = requests.post(endpoint, json=payload, headers=headers, timeout=timeout)
     if response.status_code >= 400:
-        raise RuntimeError(
-            "Model gateway returned error "
-            f"{response.status_code}: {truncate(response.text, 1200)}"
-        )
+        raise RuntimeError(f"Model gateway returned error {response.status_code}: {truncate(response.text, 1200)}")
     try:
         data = response.json()
-    except ValueError as exc:  # noqa: B902
+    except ValueError as exc:
         raise RuntimeError("Model gateway response is not valid JSON") from exc
     choices = data.get("choices")
     if not isinstance(choices, list) or not choices:
@@ -228,7 +233,6 @@ def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str)
     if not isinstance(message, dict) or "content" not in message:
         raise RuntimeError("Model gateway response missing message content")
     return parse_json_response(message["content"])
-
 
 def parse_json_response(content: str) -> Dict:
     cleaned = content.strip()
@@ -262,28 +266,9 @@ def parse_json_response(content: str) -> Dict:
         raise ValueError("doc_patches must be an array")
     return data
 
-
-def apply_patch(patch_text: str) -> None:
-    if not patch_text.strip():
-        return
-    try:
-        validate_unified_diff(patch_text)
-    except ValueError as exc:
-        raise RuntimeError(f"Invalid doc patch format: {exc}\nPatch snippet:\n{patch_text[:500]}") from exc
-    process = subprocess.run(
-        ["git", "apply", "-p0", "--whitespace=fix"],
-        input=patch_text.encode("utf-8"),
-        cwd=REPO_ROOT,
-        capture_output=True,
-    )
-    if process.returncode != 0:
-        raise RuntimeError(
-            f"Failed to apply patch: {process.stderr.decode('utf-8')}\nPatch snippet:\n{patch_text[:500]}"
-        )
-
+# ---------- patch / changelog ----------
 
 HUNK_HEADER_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
-
 
 def validate_unified_diff(patch_text: str) -> None:
     lines = [line for line in patch_text.splitlines() if line.strip()]
@@ -296,6 +281,16 @@ def validate_unified_diff(patch_text: str) -> None:
         sample = "\n".join(invalid_headers[:3])
         raise ValueError(f"Invalid unified diff hunk header(s):\n{sample}")
 
+def apply_patch(patch_text: str) -> None:
+    if not patch_text.strip():
+        return
+    try:
+        validate_unified_diff(patch_text)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid doc patch format: {exc}\nPatch snippet:\n{patch_text[:500]}") from exc
+    process = subprocess.run(["git", "apply", "-p0", "--whitespace=fix"], input=patch_text.encode("utf-8"), cwd=REPO_ROOT, capture_output=True)
+    if process.returncode != 0:
+        raise RuntimeError(f"Failed to apply patch: {process.stderr.decode('utf-8')}\nPatch snippet:\n{patch_text[:500]}")
 
 def ensure_changelog_entry(entry: str) -> None:
     entry = entry.strip()
@@ -332,7 +327,6 @@ def ensure_changelog_entry(entry: str) -> None:
     new_lines = lines[:insert_at] + block + lines[insert_at:]
     changelog_path.write_text("\n".join(new_lines).strip() + "\n", encoding="utf-8")
 
-
 def apply_doc_updates(doc_patches: List[Dict], adr_payload: Dict, changelog_entry: str) -> None:
     changelog_touched = False
     for patch in doc_patches:
@@ -346,41 +340,16 @@ def apply_doc_updates(doc_patches: List[Dict], adr_payload: Dict, changelog_entr
     if changelog_entry.strip() and not changelog_touched:
         ensure_changelog_entry(changelog_entry)
 
+# ---------- PR comment ----------
 
-def format_comment(data: Dict) -> str:
-    checklist_lines = [f"- [{ 'x' if item.get('status') == 'done' else ' ' }] {item.get('item')} ({item.get('status')})" for item in data.get("checklist", [])]
-    checklist_block = "\n".join(checklist_lines) if checklist_lines else "- [ ] No follow-up actions identified"
-    labels = ", ".join(data.get("labels", [])) or "(none)"
-    reviewers = ", ".join(data.get("reviewers", [])) or "(none)"
-    change_types = ", ".join(data.get("change_types", [])) or "(unspecified)"
-    affected_modules = ", ".join(data.get("affected_modules", [])) or "(none)"
-    summary = data.get("pr_summary", "")
-    breaking = data.get("breaking_changes", "")
-    migrations = data.get("migrations", "")
-    semver = data.get("semver_suggestion", "")
-    security = data.get("security_notes", "")
-    testing = data.get("testing_updates", "")
-    observability = data.get("observability_updates", "")
-
-    lines = [
-        COMMENT_MARKER,
-        "### Momentum Codex Doc Autopilot",
-        f"**Summary:** {summary}",
-        f"**Change types:** {change_types}",
-        f"**Affected modules:** {affected_modules}",
-        f"**Breaking changes:** {breaking or 'None reported'}",
-        f"**Migrations:** {migrations or 'None'}",
-        f"**SemVer suggestion:** {semver or 'patch'}",
-        f"**Security notes:** {security or 'None'}",
-        f"**Testing updates:** {testing or 'None'}",
-        f"**Observability updates:** {observability or 'None'}",
-        f"**Labels:** {labels}",
-        f"**Reviewers:** {reviewers}",
-        "**Checklist:**",
-        checklist_block,
-    ]
-    return "\n\n".join(lines)
-
+def fetch_existing_comment_id(pr: Dict, token: str, repo: str) -> str | None:
+    url = f"https://api.github.com/repos/{repo}/issues/{pr['number']}/comments"
+    comments = gh_get(url, token)
+    if isinstance(comments, list):
+        for c in comments:
+            if isinstance(c, dict) and COMMENT_MARKER in (c.get("body") or ""):
+                return str(c.get("id"))
+    return None
 
 def post_comment(pr: Dict, body: str) -> None:
     token = os.environ.get("GITHUB_TOKEN")
@@ -390,77 +359,37 @@ def post_comment(pr: Dict, body: str) -> None:
     repo = os.environ.get("GITHUB_REPOSITORY")
     if not repo:
         raise RuntimeError("GITHUB_REPOSITORY env var missing")
-    url = f"https://api.github.com/repos/{repo}/issues/{pr['number']}/comments"
-    existing = fetch_existing_comments(pr)
-    if existing:
-        comment_id = existing
-        update_url = f"https://api.github.com/repos/{repo}/issues/comments/{comment_id}"
-        run_command([
-            "curl",
-            "-sS",
-            "-X",
-            "PATCH",
-            update_url,
-            "-H",
-            f"Authorization: Bearer {token}",
-            "-H",
-            "Accept: application/vnd.github+json",
-            "-d",
-            json.dumps({"body": body}),
-        ], check=True)
+    existing_id = fetch_existing_comment_id(pr, token, repo)
+    if existing_id:
+        url = f"https://api.github.com/repos/{repo}/issues/comments/{existing_id}"
+        gh_post_or_patch(url, token, {"body": body}, method="PATCH")
     else:
-        run_command([
-            "curl",
-            "-sS",
-            "-X",
-            "POST",
-            url,
-            "-H",
-            f"Authorization: Bearer {token}",
-            "-H",
-            "Accept: application/vnd.github+json",
-            "-d",
-            json.dumps({"body": body}),
-        ], check=True)
+        url = f"https://api.github.com/repos/{repo}/issues/{pr['number']}/comments"
+        gh_post_or_patch(url, token, {"body": body}, method="POST")
 
-
-def fetch_existing_comments(pr: Dict) -> str | None:
-    token = os.environ.get("GITHUB_TOKEN")
-    repo = os.environ.get("GITHUB_REPOSITORY")
-    if not token or not repo:
-        return None
-    comments_url = f"https://api.github.com/repos/{repo}/issues/{pr['number']}/comments"
-    _, stdout, _ = run_command([
-        "curl",
-        "-sS",
-        "-H",
-        f"Authorization: Bearer {token}",
-        "-H",
-        "Accept: application/vnd.github+json",
-        comments_url,
-    ])
-    try:
-        comments = json.loads(stdout)
-    except json.JSONDecodeError:
-        return None
-    for comment in comments:
-        if isinstance(comment, dict) and COMMENT_MARKER in comment.get("body", ""):
-            return str(comment.get("id"))
-    return None
-
+# ---------- main ----------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Momentum Codex doc autopilot")
     parser.add_argument("--export-env", action="store_true", help="Export PR metadata to environment")
+    parser.add_argument("--pr", type=int, default=None, help="PR number (fallback: PR_NUMBER/GITHUB_PR_NUMBER)")
+    parser.add_argument("--repo", type=str, default=None, help="owner/repo (fallback: REPO/GITHUB_REPOSITORY)")
+    parser.add_argument("--token", type=str, default=None, help="GitHub token (fallback: GITHUB_TOKEN)")
     args = parser.parse_args()
 
-    event = load_event()
-    pr = event.get("pull_request")
-    if not pr:
-        raise RuntimeError("This workflow must be triggered by a pull_request event")
+    pr = load_pr_from_event_or_api(args)
 
     if args.export_env:
-        export_metadata_to_env(pr)
+        github_env = os.environ.get("GITHUB_ENV")
+        if github_env:
+            with open(github_env, "a", encoding="utf-8") as handle:
+                handle.write(f"PR_NUMBER={pr['number']}\n")
+                handle.write(f"PR_TITLE<<EOF\n{pr['title']}\nEOF\n")
+                body = pr.get("body") or ""
+                handle.write(f"PR_BODY<<EOF\n{body}\nEOF\n")
+                handle.write(f"PR_AUTHOR={pr['user']['login']}\n")
+                handle.write(f"PR_HEAD={pr['head']['ref']}\n")
+                handle.write(f"PR_BASE={pr['base']['ref']}\n")
         return
 
     head_ref = pr["head"]["ref"]
@@ -499,10 +428,45 @@ def main() -> None:
 
     print("Doc autopilot completed successfully")
 
+# ---------- formatting helpers reused (unchanged) ----------
+
+def format_comment(data: Dict) -> str:
+    checklist_lines = [f"- [{'x' if item.get('status') == 'done' else ' '}] {item.get('item')} ({item.get('status')})" for item in data.get("checklist", [])]
+    checklist_block = "\n".join(checklist_lines) if checklist_lines else "- [ ] No follow-up actions identified"
+    labels = ", ".join(data.get("labels", [])) or "(none)"
+    reviewers = ", ".join(data.get("reviewers", [])) or "(none)"
+    change_types = ", ".join(data.get("change_types", [])) or "(unspecified)"
+    affected_modules = ", ".join(data.get("affected_modules", [])) or "(none)"
+    summary = data.get("pr_summary", "")
+    breaking = data.get("breaking_changes", "")
+    migrations = data.get("migrations", "")
+    semver = data.get("semver_suggestion", "")
+    security = data.get("security_notes", "")
+    testing = data.get("testing_updates", "")
+    observability = data.get("observability_updates", "")
+
+    lines = [
+        COMMENT_MARKER,
+        "### Momentum Codex Doc Autopilot",
+        f"**Summary:** {summary}",
+        f"**Change types:** {change_types}",
+        f"**Affected modules:** {affected_modules}",
+        f"**Breaking changes:** {breaking or 'None reported'}",
+        f"**Migrations:** {migrations or 'None'}",
+        f"**SemVer suggestion:** {semver or 'patch'}",
+        f"**Security notes:** {security or 'None'}",
+        f"**Testing updates:** {testing or 'None'}",
+        f"**Observability updates:** {observability or 'None'}",
+        f"**Labels:** {labels}",
+        f"**Reviewers:** {reviewers}",
+        "**Checklist:**",
+        checklist_block,
+    ]
+    return "\n\n".join(lines)
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"::error::{exc}", file=sys.stderr)
         raise
