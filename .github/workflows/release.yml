@@ -82,79 +82,62 @@ jobs:
         with:
           script: |
             const { owner, repo } = context.repo;
-            const tag = "${{ steps.semver.outputs.tag }}";                 // es. v1.2.3
-            const target = "${{ steps.semver.outputs.release_branch }}";   // es. release/v1.2.3
+            const tag = ${{ toJSON(steps.semver.outputs.tag) }};               // es. "v1.2.3"
+            const target = ${{ toJSON(steps.semver.outputs.release_branch) }}; // es. "release/v1.2.3"
 
-            // 1) prendi l'ultimo tag esistente (escludendo quello che stai creando ora)
-            // fallback a v0.1.0 se non ci sono tag
-            const exec = require('child_process').execSync;
-            let lastTag = "";
-            try {
-              lastTag = exec('git describe --tags --abbrev=0 2>/dev/null', {encoding: 'utf8'}).trim();
-            } catch {
-              lastTag = "v0.1.0";
+            // Usa l'exec fornito dall'action (NON ridefinire 'exec')
+            let lastTag = "v0.1.0";
+            {
+              const res = await exec.getExecOutput('git', ['describe', '--tags', '--abbrev=0'], { ignoreReturnCode: true });
+              if (res.exitCode === 0 && res.stdout.trim()) lastTag = res.stdout.trim();
             }
-
             core.info(`Base tag for notes: ${lastTag} -> ${target}`);
 
-            // 2) confronta commit (base=ultimo tag, head=release branch HEAD)
-            const baseRef = lastTag;
-            const headRef = target; // compare accetta branch
+            // Confronta commit tra ultimo tag e HEAD della release branch
             const cmp = await github.rest.repos.compareCommits({
-              owner, repo, base: baseRef, head: headRef
+              owner, repo, base: lastTag, head: target
             });
 
-            // 3) classifica commit per Conventional Commit
             const commits = (cmp.data.commits || []).map(c => c.commit.message.split('\n')[0]);
-            const groups = { feat:[], fix:[], perf:[], refactor:[], docs:[], chore:[], ci:[], test:[], style:[], revert:[], other:[] };
 
+            const buckets = { feat:[], fix:[], perf:[], refactor:[], docs:[], chore:[], ci:[], test:[], style:[], revert:[], other:[] };
             for (const msg of commits) {
               const m = msg.match(/^(\w+)(\([\w\-\./]+\))?:(.*)$/);
-              if (m && groups[m[1]]) groups[m[1]].push(msg);
-              else groups.other.push(msg);
+              if (m && buckets[m[1]]) buckets[m[1]].push(msg);
+              else buckets.other.push(msg);
             }
+            const section = (title, arr) => arr.length ? `### ${title}\n` + arr.map(s => `- ${s}`).join('\n') + '\n\n' : '';
 
-            function section(title, arr) {
-              if (!arr.length) return "";
-              return `### ${title}\n` + arr.map(s => `- ${s}`).join("\n") + "\n\n";
-            }
-
-            // 4) PR mergiati nel range (opzionale ma utile)
-            // cerchiamo PR mergiati tra le due SHAs usando search
-            // Nota: per repo privati con tanti PR potresti dover iterare; qui facciamo best-effort
-            const mergedSince = cmp.data.base_commit.commit.author.date;
-            const mergedUntil = new Date().toISOString();
-            const prQuery = `repo:${owner}/${repo} is:pr is:merged merged:${mergedSince}..${mergedUntil}`;
-            let prs = [];
+            // PR mergiati nel periodo (best-effort per intervallo temporale)
+            let prLines = [];
             try {
-              const res = await github.rest.search.issuesAndPullRequests({ q: prQuery, per_page: 100 });
-              prs = res.data.items || [];
+              const mergedSince = cmp.data.base_commit?.commit?.author?.date ?? new Date(Date.now()-30*86400000).toISOString();
+              const mergedUntil = new Date().toISOString();
+              const q = `repo:${owner}/${repo} is:pr is:merged merged:${mergedSince}..${mergedUntil}`;
+              const res = await github.rest.search.issuesAndPullRequests({ q, per_page: 100 });
+              prLines = (res.data.items || []).map(p => `- #${p.number} ${p.title}`);
             } catch (e) {
               core.warning(`PR search failed: ${e.message}`);
             }
 
-            const prLines = prs.map(p => `- #${p.number} ${p.title}`);
-
-            let body = "";
+            let body = '';
             body += `## ${tag}\n\n`;
             body += `**Range:** ${lastTag} → ${target}\n\n`;
-            body += section("Features", groups.feat);
-            body += section("Fixes", groups.fix);
-            body += section("Performance", groups.perf);
-            body += section("Refactor", groups.refactor);
-            body += section("Docs", groups.docs);
-            body += section("CI", groups.ci);
-            body += section("Tests", groups.test);
-            body += section("Chore", groups.chore);
-            body += section("Style", groups.style);
-            body += section("Revert", groups.revert);
-            body += section("Other", groups.other);
-
-            if (prLines.length) {
-              body += `### Merged PRs\n` + prLines.join("\n") + "\n";
-            }
+            body += section('Features',  buckets.feat);
+            body += section('Fixes',     buckets.fix);
+            body += section('Performance', buckets.perf);
+            body += section('Refactor',  buckets.refactor);
+            body += section('Docs',      buckets.docs);
+            body += section('CI',        buckets.ci);
+            body += section('Tests',     buckets.test);
+            body += section('Chore',     buckets.chore);
+            body += section('Style',     buckets.style);
+            body += section('Revert',    buckets.revert);
+            body += section('Other',     buckets.other);
+            if (prLines.length) body += `### Merged PRs\n${prLines.join('\n')}\n`;
 
             core.setOutput('body', body);
+
 
 
       - name: Create / update release branch
