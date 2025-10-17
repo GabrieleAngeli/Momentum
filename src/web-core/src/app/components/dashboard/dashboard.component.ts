@@ -1,4 +1,4 @@
-import { AsyncPipe, CommonModule } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, effect, inject, signal } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
 import { TelemetryService } from '../../services/telemetry.service';
