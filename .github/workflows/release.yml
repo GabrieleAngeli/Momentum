@@ -2,11 +2,10 @@ name: Release on main
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 permissions:
-  contents: write   # push branch, creare tag e release
+  contents: write
   issues: write
   pull-requests: write
 
@@ -43,19 +42,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Calculate next version (SemVer)
+      - name: Calculate next version (SemVer from Conventional Commits)
         id: semver
         shell: bash
         run: |
           set -euo pipefail
-
-          # ultimo tag (se assente, parti da 0.1.0)
           LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          if [[ -z "${LAST_TAG}" ]]; then
-            LAST_TAG="v0.1.0"
-          fi
-
-          # normalizza in X.Y.Z
+          if [[ -z "${LAST_TAG}" ]]; then LAST_TAG="v0.1.0"; fi
           BASE="${LAST_TAG#v}"
 
           COMMITS="$(git log --pretty=format:%s "${LAST_TAG}..HEAD" || true)"
@@ -65,10 +58,9 @@ jobs:
             BUMP="major"
           elif echo "${COMMITS}" | grep -Eqi '^feat(\(|:)|^feat!'; then
             BUMP="minor"
-          elif echo "${COMMITS}" | grep -Eqi '^fix(\(|:)|^fix!'; then
+          elif echo "${COMMITS}" | grep -Eqi '^fix(\(|:)|^perf(\(|:)|^refactor(\(|:)|^fix!|^perf!|^refactor!' ; then
             BUMP="patch"
           else
-            # fallback: se ci sono commit ma nessun feat/fix, patch
             if [[ -n "${COMMITS}" ]]; then BUMP="patch"; fi
           fi
 
@@ -80,15 +72,9 @@ jobs:
           esac
 
           NEW_VERSION="${MA}.${MI}.${PA}"
-          REL_BRANCH="release/v${NEW_VERSION}"
-          TAG="v${NEW_VERSION}"
-
-          echo "last_tag=${LAST_TAG}"   >> "$GITHUB_OUTPUT"
-          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "release_branch=${REL_BRANCH}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-          echo "Resolved bump=${BUMP} | ${LAST_TAG} -> ${TAG}"
+          echo "new_version=${NEW_VERSION}"           >> "$GITHUB_OUTPUT"
+          echo "release_branch=release/v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}"                  >> "$GITHUB_OUTPUT"
 
       - name: Create / update release branch
         env:
@@ -97,17 +83,14 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git fetch origin --prune
-
-          # Crea o sposta la branch al commit di main attuale
           if git rev-parse --verify "$REL" >/dev/null 2>&1; then
             git switch "$REL"
-            git reset --hard "origin/main"
+            git reset --hard origin/main
           else
             git switch -c "$REL"
+            git reset --hard origin/main
           fi
-
           git push --force-with-lease origin "$REL"
 
       - name: Bump version in solution (best-effort)
@@ -115,17 +98,12 @@ jobs:
           VERSION: ${{ steps.semver.outputs.new_version }}
         run: |
           set -euo pipefail
-          # Aggiorna eventuali file versione comuni in modo "soft" (se esistono)
-          # 1) Directory.Build.props
           if [[ -f Directory.Build.props ]]; then
             sed -i -E "s|<Version>[^<]+</Version>|<Version>${VERSION}</Version>|" Directory.Build.props || true
           fi
-          # 2) package.json in web-core
           if [[ -f "${WEB_DIR}/package.json" ]]; then
             jq --arg v "${VERSION}" '.version=$v' "${WEB_DIR}/package.json" > "${WEB_DIR}/package.json.tmp" && mv "${WEB_DIR}/package.json.tmp" "${WEB_DIR}/package.json"
           fi
-
-          # Commit solo se ci sono modifiche
           if ! git diff --quiet; then
             git add -A
             git commit -m "chore(release): bump version to v${VERSION}"
@@ -136,22 +114,29 @@ jobs:
           set -euo pipefail
           mkdir -p "${ARTIFACTS_DIR}"
 
-          # .NET build/publish
+          # .NET
           dotnet restore "${SOLUTION}"
           dotnet build "${SOLUTION}" -c Release --no-restore
-          # AppHost publish (se presente)
+
+          # AppHost publish + zip solo se c'è output
           if [[ -d "${APPHOST_DIR}" ]]; then
-            dotnet publish "${APPHOST_DIR}" -c Release -o "${ARTIFACTS_DIR}/apphost-publish"
-            (cd "${ARTIFACTS_DIR}" && zip -r apphost-publish.zip apphost-publish >/dev/null)
+            OUT="${ARTIFACTS_DIR}/apphost-publish"
+            dotnet publish "${APPHOST_DIR}" -c Release -o "${OUT}"
+            if [[ -d "${OUT}" ]] && compgen -G "${OUT}/*" > /dev/null; then
+              (cd "${ARTIFACTS_DIR}" && zip -rq apphost-publish.zip apphost-publish)
+            else
+              echo "No AppHost publish output to zip."
+            fi
           fi
 
-          # web-core build
+          # web-core
           if [[ -f "${WEB_DIR}/package.json" ]]; then
             npm ci --prefix "${WEB_DIR}"
             npm run build --prefix "${WEB_DIR}"
-            # impacchetta dist
-            if [[ -d "${WEB_DIR}/dist" ]]; then
-              (cd "${WEB_DIR}/dist" && zip -r "../../${ARTIFACTS_DIR}/web-core-dist.zip" . >/dev/null)
+            if [[ -d "${WEB_DIR}/dist" ]] && compgen -G "${WEB_DIR}/dist/*" > /dev/null; then
+              (cd "${WEB_DIR}/dist" && zip -rq "../../${ARTIFACTS_DIR}/web-core-dist.zip" .)
+            else
+              echo "No web-core dist to zip."
             fi
           fi
 
@@ -160,15 +145,15 @@ jobs:
         with:
           name: release-artifacts-${{ steps.semver.outputs.new_version }}
           path: artifacts
+          if-no-files-found: ignore
 
       - name: Create tag
         env:
           TAG: ${{ steps.semver.outputs.tag }}
-          REL: ${{ steps.semver.outputs.release_branch }}
         run: |
           set -euo pipefail
-          git tag -a "${TAG}" -m "Release ${TAG}"
-          # Punta il tag alla release branch appena creata
+          # Tagga il commit corrente (release branch appena resettata su origin/main)
+          git tag -a "${TAG}" -m "Release ${TAG}" || true
           git push origin "${TAG}"
 
       - name: Create GitHub Release (draft)
@@ -183,9 +168,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push release branch updates (version bumps, etc.)
+      - name: Push release branch updates (version bump commit, if any)
         env:
           REL: ${{ steps.semver.outputs.release_branch }}
         run: |
           set -euo pipefail
+          # Se abbiamo fatto un commit di bump versione, pushiamolo
           git push origin "${REL}"
