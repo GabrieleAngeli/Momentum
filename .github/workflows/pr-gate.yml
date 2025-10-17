@@ -148,15 +148,15 @@ jobs:
         with:
           files: ./test-results/coverage/**/coverage.cobertura.xml
           flags: backend
-
+  
   issue_linking:
     name: Issue Linking Auto Create
     runs-on: ubuntu-latest
     needs: [ci]
     if: >
       github.event_name == 'pull_request' &&
-      contains(fromJson('["opened","reopened","ready_for_review","labeled"]'), github.event.action) &&
-      !github.event.pull_request.draft
+      !github.event.pull_request.draft &&
+      needs.ci.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -183,6 +183,114 @@ jobs:
             --repo "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}" \
             --auto-create
+  
+  release_notes_pr:
+    name: Release Notes Preview (commit on PR branch)
+    runs-on: ubuntu-latest
+    needs:
+      - ci
+      - test_dotnet
+    permissions:
+      contents: write
+      pull-requests: write
+    if: ${{ success() }}  # esegue solo se i job necessari sono passati
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next SemVer from PR commits
+        id: semver
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          # prendi l’ultimo tag (se non c’è, parti da v0.1.0)
+          LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.1.0)"
+          BASE_VERSION="${LAST_TAG#v}"
+
+          # analizza SOLO i commit del PR
+          COMMITS="$(git log --pretty=format:%s "${BASE_SHA}..${HEAD_SHA}" || true)"
+
+          BUMP="patch"
+          if echo "${COMMITS}" | grep -Eqi 'BREAKING CHANGE|!:' ; then
+            BUMP="major"
+          elif echo "${COMMITS}" | grep -Eqi '^feat(\(|:)|^feat!'; then
+            BUMP="minor"
+          elif echo "${COMMITS}" | grep -Eqi '^fix(\(|:)|^fix!'; then
+            BUMP="patch"
+          else
+            if [[ -n "${COMMITS}" ]]; then BUMP="patch"; fi
+          fi
+
+          IFS='.' read -r MA MI PA <<< "${BASE_VERSION}"
+          case "${BUMP}" in
+            major) MA=$((MA+1)); MI=0; PA=0;;
+            minor) MI=$((MI+1)); PA=0;;
+            patch) PA=$((PA+1));;
+          esac
+
+          NEXT="${MA}.${MI}.${PA}"
+          TAG="v${NEXT}-rc.PR-${{ github.event.pull_request.number }}"
+
+          echo "next=${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"   >> "$GITHUB_OUTPUT"
+
+      - name: Generate Release Notes (GitHub API)
+        id: ghnotes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = "${{ steps.semver.outputs.tag }}";
+            // genera le note puntando alla HEAD del PR
+            const target = context.payload.pull_request.head.sha;
+            const res = await github.rest.repos.generateReleaseNotes({
+              owner, repo, tag_name: tag, target_commitish: target
+            });
+            core.setOutput('body', res.data.body || '');
+
+      # commit SOLO se non è un fork (secrets non disponibili su fork)
+      - name: Commit preview notes on PR branch
+        if: ${{ github.event.pull_request.head.repo.fork == false }}
+        run: |
+          set -euo pipefail
+          BRANCH="${{ github.head_ref }}"
+          mkdir -p ReleaseNotes
+          FILE="ReleaseNotes/${{ steps.semver.outputs.tag }}.md"
+          printf "%s" "${{ steps.ghnotes.outputs.body }}" > "${FILE}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git switch "${BRANCH}"
+          git add "${FILE}"
+          if ! git diff --cached --quiet; then
+            git commit -m "docs(release): add preview notes for ${{ steps.semver.outputs.tag }}"
+            git push origin "${BRANCH}"
+          fi
+
+      # in ogni caso, commento sul PR per la preview
+      - name: Comment preview on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+
+            // Stringhe JSON-escaped valide in JS
+            const notes = ${{ toJSON(steps.ghnotes.outputs.body) }};
+            const tag   = ${{ toJSON(steps.semver.outputs.tag) }};
+
+            const body = `### Release Notes Preview for **${tag}**
+
+            ${notes}`;
+
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: prNumber, body
+            });
 
   pr_doc_autopilot:
     name: PR Doc Autopilot Commit Push
