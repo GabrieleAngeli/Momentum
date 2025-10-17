@@ -95,7 +95,7 @@ jobs:
       - name: Test with trx
         run: |
           mkdir -p ./test-results
-          dotnet test Momentum.sln -c Release \
+          dotnet test Momentum.sln -c Release --no-build \
             --logger "trx" \
             --results-directory ./test-results
 
