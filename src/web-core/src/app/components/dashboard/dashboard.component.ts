@@ -6,7 +6,7 @@ import { TelemetryService } from '../../services/telemetry.service';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, AsyncPipe, TranslateModule],
+  imports: [CommonModule, TranslateModule],
   providers: [TelemetryService],
   template: `
     <section>
