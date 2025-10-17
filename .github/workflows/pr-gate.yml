@@ -109,12 +109,11 @@ jobs:
       - name: Test (.NET) with coverage (Coverlet)
         run: |
           mkdir -p ./test-results
-          dotnet test Momentum.sln -c Release --no-build \
+          mkdir -p ./test-results/coverage
+          dotnet test Momentum.sln -c Release \
             --logger "trx" \
             --results-directory ./test-results \
-            /p:CollectCoverage=true \
-            /p:CoverletOutputFormat=cobertura \
-            /p:CoverletOutput=./test-results/coverage/
+            --collect:"XPlat Code Coverage"
 
       - name: List results
         if: always()
@@ -133,7 +132,7 @@ jobs:
         run: |
           dotnet tool update -g dotnet-reportgenerator-globaltool
           reportgenerator \
-            -reports:"./test-results/coverage/**/*.cobertura.xml" \
+            -reports:"./test-results/**/coverage.cobertura.xml" \
             -targetdir:"./test-results/coveragereport" \
             -reporttypes:"Html;TextSummary"
           cat ./test-results/coveragereport/Summary.txt || true
