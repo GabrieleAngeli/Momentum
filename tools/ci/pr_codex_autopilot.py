@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""Momentum Codex PR documentation autopilot runner."""
+"""Momentum Codex PR documentation autopilot runner.
+
+Genera patch SOLO per file di documentazione (README, docs/**, CHANGELOG, .github/**, modules/*/README.md, docs/ADR/**),
+deducendo gli aggiornamenti necessari dai commit e dal diff del PR. Applica le patch in modo sicuro (skip su errori) e
+commenta il PR con un riassunto strutturato.
+"""
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import re
@@ -16,10 +22,16 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+# --------------------------------------------------------------------------------------
+# Costanti / limiti (configurabili via env)
+# --------------------------------------------------------------------------------------
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SYSTEM_PROMPT_PATH = REPO_ROOT / "tools" / "ci" / "prompts" / "momentum_codex_autopilot.system.md"
 USER_PROMPT_PATH = REPO_ROOT / "tools" / "ci" / "prompts" / "momentum_codex_autopilot.user.md"
+
 COMMENT_MARKER = "<!-- momentum-doc-autopilot -->"
+
 SUPPORTED_DOC_FILES = [
     Path("README.md"),
     Path("docs/ARCHITECTURE.md"),
@@ -32,41 +44,77 @@ SUPPORTED_DOC_FILES = [
     Path(".github/labeler.yml"),
 ]
 DOC_ADR_DIR = Path("docs/ADR")
-MAX_CONTEXT_CHARS = 16000
-MAX_DIFF_CHARS = 120000
-MAX_BODY_CHARS = 6000
 
-# ---------- utils ----------
+# limiti default; possono essere ridotti via env per evitare 429/TPM
+MAX_CONTEXT_CHARS = int(os.environ.get("MAX_CONTEXT_CHARS", "16000"))
+MAX_DIFF_CHARS = int(os.environ.get("MAX_DIFF_CHARS", "120000"))
+MAX_BODY_CHARS = int(os.environ.get("MAX_BODY_CHARS", "6000"))
 
-def shrink_prompt(user_prompt: str, factor: float) -> str:
-    """Ritaglia le sezioni lunghe del prompt mantenendo il formato."""
-    # Taglia alla fine, lasciando un marker.
-    keep = max(1000, int(len(user_prompt) * factor))
-    if len(user_prompt) <= keep:
-        return user_prompt
-    return user_prompt[:keep] + "\n\n[...prompt truncated to reduce tokens...]\n"
+# Pattern ammessi per patch di documentazione (tutto il resto viene scartato)
+ALLOWED_GLOBS = [
+    "README.md",
+    "CHANGELOG.md",
+    "docs/**",
+    ".github/**",
+    "modules/*/README.md",
+    f"{DOC_ADR_DIR}/**",
+]
+
+# --------------------------------------------------------------------------------------
+# Utils
+# --------------------------------------------------------------------------------------
 
 def run_command(args: List[str], *, cwd: Path | None = None, check: bool = True, capture_output: bool = True) -> Tuple[int, str, str]:
-    result = subprocess.run(args, cwd=str(cwd) if cwd else None, check=False, capture_output=capture_output, text=True)
+    result = subprocess.run(
+        args,
+        cwd=str(cwd) if cwd else None,
+        check=False,
+        capture_output=capture_output,
+        text=True,
+    )
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(result.returncode, args, result.stdout, result.stderr)
     return result.returncode, result.stdout, result.stderr
 
+
 def truncate(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 3] + "..."
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def shrink_prompt(user_prompt: str, factor: float) -> str:
+    """Ritaglia il prompt per ridurre i token mantenendo struttura e contesto minimo."""
+    keep = max(1200, int(len(user_prompt) * factor))
+    if len(user_prompt) <= keep:
+        return user_prompt
+    return user_prompt[:keep] + "\n\n[...prompt truncated to reduce tokens...]\n"
+
 
 def load_prompt_template(path: Path) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Prompt template missing: {path}")
     return path.read_text(encoding="utf-8")
 
+
 def render_user_prompt(template: str, values: Dict[str, str]) -> str:
+    prompt = template
+    # rinforzo: limitiamo il modello a DOC ONLY
+    guard = (
+        "\n\nIMPORTANT: Generate ONLY documentation changes. "
+        "Only produce unified-diff patches that touch these paths: "
+        "`README.md`, `docs/**`, `.github/**`, `modules/*/README.md`, `docs/ADR/**`, `CHANGELOG.md`. "
+        "Do NOT modify or reference code files (e.g., `src/**`, `*.cs`, `*.ts`, etc.).\n"
+    )
+    template = template + guard
     prompt = template
     for key, value in values.items():
         prompt = prompt.replace(f"{{{{{key}}}}}", value)
     return prompt
 
-# ---------- GH event / REST ----------
+# --------------------------------------------------------------------------------------
+# GitHub event / REST helpers
+# --------------------------------------------------------------------------------------
 
 def load_event() -> Dict | None:
     event_path = os.environ.get("GITHUB_EVENT_PATH")
@@ -75,11 +123,13 @@ def load_event() -> Dict | None:
     with open(event_path, "r", encoding="utf-8") as handle:
         return json.load(handle)
 
+
 def gh_get(url: str, token: str, *, params: Dict[str, Any] | None = None, max_wait: int = 300) -> Dict:
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "doc-autopilot-ci",
     }
     while True:
         r = requests.get(url, headers=headers, params=params, timeout=60)
@@ -93,11 +143,13 @@ def gh_get(url: str, token: str, *, params: Dict[str, Any] | None = None, max_wa
         r.raise_for_status()
         return r.json()
 
+
 def gh_post_or_patch(url: str, token: str, payload: Dict[str, Any], method: str = "POST") -> Dict:
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "doc-autopilot-ci",
     }
     func = requests.post if method.upper() == "POST" else requests.patch
     r = func(url, headers=headers, json=payload, timeout=60)
@@ -105,13 +157,14 @@ def gh_post_or_patch(url: str, token: str, payload: Dict[str, Any], method: str 
         raise RuntimeError(f"GitHub API error {r.status_code}: {truncate(r.text, 800)}")
     return r.json()
 
+
 def load_pr_from_event_or_api(args) -> Dict:
-    # 1) prova evento
+    # 1) evento GitHub
     event = load_event()
     if event and "pull_request" in event:
         return event["pull_request"]
 
-    # 2) via REST usando args/env
+    # 2) via REST
     repo = args.repo or os.environ.get("REPO") or os.environ.get("GITHUB_REPOSITORY")
     pr_num = args.pr or os.environ.get("PR_NUMBER") or os.environ.get("GITHUB_PR_NUMBER")
     token = args.token or os.environ.get("GITHUB_TOKEN")
@@ -121,7 +174,9 @@ def load_pr_from_event_or_api(args) -> Dict:
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_num}"
     return gh_get(url, token)
 
-# ---------- repo context ----------
+# --------------------------------------------------------------------------------------
+# Repository context / diff
+# --------------------------------------------------------------------------------------
 
 def collect_repository_context(touched_modules: Iterable[str]) -> str:
     sections: List[str] = []
@@ -155,6 +210,7 @@ def collect_repository_context(touched_modules: Iterable[str]) -> str:
             sections.append(f"### modules/{module}/README.md\n" + truncate(content, MAX_CONTEXT_CHARS // 6))
     return "\n\n".join(sections)
 
+
 def get_touched_modules_from_diff(diff_text: str) -> List[str]:
     modules: set[str] = set()
     for line in diff_text.splitlines():
@@ -166,25 +222,34 @@ def get_touched_modules_from_diff(diff_text: str) -> List[str]:
                     modules.add(parts[1])
     return sorted(modules)
 
+
 def fetch_branches(base_ref: str) -> None:
     run_command(["git", "fetch", "origin", base_ref], cwd=REPO_ROOT)
 
+
 def build_diff(base_ref: str) -> str:
     _, diff_output, _ = run_command(["git", "diff", f"origin/{base_ref}...HEAD"], cwd=REPO_ROOT)
-    return truncate(diff_output, MAX_DIFF_CHARS)
+    diff_output = truncate(diff_output, MAX_DIFF_CHARS)
+    if len(diff_output) >= MAX_DIFF_CHARS:
+        diff_output += "\n\n[Note: unified diff truncated]\n"
+    return diff_output
 
-def collect_commit_subjects(max_count: int = 20) -> str:
+
+def collect_commit_subjects(max_count: int = 10) -> str:
+    # limitiamo a 10 per contenere i token
     _, output, _ = run_command(["git", "log", "--pretty=format:%s", "HEAD", f"-n{max_count}"], cwd=REPO_ROOT)
     return output.strip()
 
-# ---------- model calls ----------
+# --------------------------------------------------------------------------------------
+# Model calls
+# --------------------------------------------------------------------------------------
 
 def call_model(system_prompt: str, user_prompt: str) -> Dict:
     provider = os.environ.get("CODEX_PROVIDER", "openai").lower()
-    model = os.environ.get("MODEL", "gpt-4o-mini")  # fallback più “leggero”
+    model = os.environ.get("MODEL", "gpt-4o-mini")  # default più “elastico”
 
     def _success_empty() -> Dict:
-        # Output vuoto ma valido: non blocca la pipeline
+        # Output “valido ma vuoto” per non bloccare il job
         return {
             "pr_summary": "",
             "change_types": [],
@@ -203,7 +268,6 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
             "doc_patches": [],
         }
 
-    # ramo OpenAI SDK
     if provider == "openai":
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
@@ -220,7 +284,6 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
         client = OpenAI(**client_kwargs)
 
         prompt = user_prompt
-        # fino a 3 tentativi: se 429/too large → shrink e riprova
         for attempt in range(3):
             try:
                 resp = client.chat.completions.create(
@@ -236,34 +299,32 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
             except Exception as e:
                 msg = str(e).lower()
                 if "rate limit" in msg or "request too large" in msg or "tpm" in msg:
-                    # accorcia e ritenta
                     factor = 0.6 if attempt == 0 else 0.4
                     prompt = shrink_prompt(prompt, factor)
                     time.sleep(2 + attempt * 2)
                     continue
-                # altri errori: re-raise
                 raise
-        # non riuscito dopo i retry → non bloccare la pipeline
         print("[doc-autopilot] Model call failed due to limits after retries. Skipping doc generation.", file=sys.stderr)
         return _success_empty()
 
-    # ramo HTTP compatibile
     if provider in {"http", "self_hosted", "compat"}:
         try:
             return call_http_compatible_model(model, system_prompt, user_prompt)
         except Exception as e:
             msg = str(e).lower()
             if "rate limit" in msg or "too large" in msg:
-                # un solo shrink anche qui
                 return call_http_compatible_model(model, system_prompt, shrink_prompt(user_prompt, 0.5))
             raise
 
     raise RuntimeError(f"Unsupported CODEX_PROVIDER '{provider}'")
 
+
 def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str) -> Dict:
     base = os.environ.get("CODEX_API_BASE")
     if not base:
-        raise RuntimeError("CODEX_API_BASE is required when CODEX_PROVIDER is set to an OpenAI-compatible HTTP mode")
+        raise RuntimeError(
+            "CODEX_API_BASE is required when CODEX_PROVIDER is set to an OpenAI-compatible HTTP mode"
+        )
     endpoint = base.rstrip("/")
     if not endpoint.endswith("/chat/completions"):
         endpoint = f"{endpoint}/v1/chat/completions"
@@ -282,7 +343,10 @@ def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str)
     }
     response = requests.post(endpoint, json=payload, headers=headers, timeout=timeout)
     if response.status_code >= 400:
-        raise RuntimeError(f"Model gateway returned error {response.status_code}: {truncate(response.text, 1200)}")
+        raise RuntimeError(
+            "Model gateway returned error "
+            f"{response.status_code}: {truncate(response.text, 1200)}"
+        )
     try:
         data = response.json()
     except ValueError as exc:
@@ -294,6 +358,7 @@ def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str)
     if not isinstance(message, dict) or "content" not in message:
         raise RuntimeError("Model gateway response missing message content")
     return parse_json_response(message["content"])
+
 
 def parse_json_response(content: str) -> Dict:
     cleaned = content.strip()
@@ -327,9 +392,13 @@ def parse_json_response(content: str) -> Dict:
         raise ValueError("doc_patches must be an array")
     return data
 
-# ---------- patch / changelog ----------
+# --------------------------------------------------------------------------------------
+# Patch / changelog helpers
+# --------------------------------------------------------------------------------------
 
 HUNK_HEADER_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
+PATCH_DIFF_HEADER = re.compile(r"^diff --git a/(.+) b/(.+)$")
+
 
 def validate_unified_diff(patch_text: str) -> None:
     lines = [line for line in patch_text.splitlines() if line.strip()]
@@ -342,16 +411,43 @@ def validate_unified_diff(patch_text: str) -> None:
         sample = "\n".join(invalid_headers[:3])
         raise ValueError(f"Invalid unified diff hunk header(s):\n{sample}")
 
+
+def extract_paths_from_patch(patch_text: str) -> list[str]:
+    paths: list[str] = []
+    for line in patch_text.splitlines():
+        m = PATCH_DIFF_HEADER.match(line)
+        if m:
+            paths.append(m.group(2))  # path del nuovo file (b/)
+    return paths
+
+
+def is_allowed_doc_path(path: str) -> bool:
+    norm = path.strip().lstrip("./")
+    for pattern in ALLOWED_GLOBS:
+        if fnmatch.fnmatch(norm, pattern):
+            return True
+    return False
+
+
 def apply_patch(patch_text: str) -> None:
     if not patch_text.strip():
         return
     try:
         validate_unified_diff(patch_text)
     except ValueError as exc:
-        raise RuntimeError(f"Invalid doc patch format: {exc}\nPatch snippet:\n{patch_text[:500]}") from exc
-    process = subprocess.run(["git", "apply", "-p0", "--whitespace=fix"], input=patch_text.encode("utf-8"), cwd=REPO_ROOT, capture_output=True)
+        print(f"[doc-autopilot] Invalid patch, skipping: {exc}", file=sys.stderr)
+        return
+    process = subprocess.run(
+        ["git", "apply", "-p0", "--whitespace=fix"],
+        input=patch_text.encode("utf-8"),
+        cwd=REPO_ROOT,
+        capture_output=True,
+    )
     if process.returncode != 0:
-        raise RuntimeError(f"Failed to apply patch: {process.stderr.decode('utf-8')}\nPatch snippet:\n{patch_text[:500]}")
+        stderr = process.stderr.decode("utf-8", errors="replace")
+        print(f"[doc-autopilot] Failed to apply patch, skipping:\n{stderr}", file=sys.stderr)
+        return
+
 
 def ensure_changelog_entry(entry: str) -> None:
     entry = entry.strip()
@@ -388,20 +484,92 @@ def ensure_changelog_entry(entry: str) -> None:
     new_lines = lines[:insert_at] + block + lines[insert_at:]
     changelog_path.write_text("\n".join(new_lines).strip() + "\n", encoding="utf-8")
 
+
 def apply_doc_updates(doc_patches: List[Dict], adr_payload: Dict, changelog_entry: str) -> None:
     changelog_touched = False
-    for patch in doc_patches:
-        patch_text = patch.get("patch", "")
+
+    for patch in doc_patches or []:
+        patch_text = (patch or {}).get("patch", "") or ""
+        if not patch_text.strip():
+            continue
+
+        # Filtra per path consentiti
+        paths = extract_paths_from_patch(patch_text)
+        if not paths:
+            print("[doc-autopilot] Skip patch: no diff headers found", file=sys.stderr)
+            continue
+        if not all(is_allowed_doc_path(p) for p in paths):
+            print(f"[doc-autopilot] Skip patch touching non-doc files: {paths}", file=sys.stderr)
+            continue
+
+        # Verifica esistenza target (consenti nuovi file in docs/** e docs/ADR/**)
+        missing = []
+        for p in paths:
+            tgt = REPO_ROOT / p
+            if not tgt.exists() and not (p.startswith("docs/") or p.startswith(str(DOC_ADR_DIR))):
+                missing.append(p)
+        if missing:
+            print(f"[doc-autopilot] Skip patch: target files not found {missing}", file=sys.stderr)
+            continue
+
         apply_patch(patch_text)
-        if patch.get("path") == "CHANGELOG.md" or "CHANGELOG.md" in patch_text:
+        if any(p.endswith("CHANGELOG.md") for p in paths) or "CHANGELOG.md" in patch_text:
             changelog_touched = True
-    adr_patch = (adr_payload or {}).get("patch", "")
+
+    # ADR proposta dal modello
+    adr_patch = (adr_payload or {}).get("patch", "") or ""
     if adr_patch.strip():
-        apply_patch(adr_patch)
+        adr_paths = extract_paths_from_patch(adr_patch)
+        if adr_paths and all(is_allowed_doc_path(p) for p in adr_paths):
+            apply_patch(adr_patch)
+        else:
+            print(f"[doc-autopilot] Skip ADR patch (paths not allowed): {adr_paths}", file=sys.stderr)
+
+    # Se non abbiamo toccato il CHANGELOG via patch ma c'è una voce, aggiungila in append
     if changelog_entry.strip() and not changelog_touched:
         ensure_changelog_entry(changelog_entry)
 
-# ---------- PR comment ----------
+# --------------------------------------------------------------------------------------
+# PR comment
+# --------------------------------------------------------------------------------------
+
+def format_comment(data: Dict) -> str:
+    checklist_lines = [
+        f"- [{'x' if item.get('status') == 'done' else ' '}] {item.get('item')} ({item.get('status')})"
+        for item in data.get("checklist", [])
+    ]
+    checklist_block = "\n".join(checklist_lines) if checklist_lines else "- [ ] No follow-up actions identified"
+    labels = ", ".join(data.get("labels", [])) or "(none)"
+    reviewers = ", ".join(data.get("reviewers", [])) or "(none)"
+    change_types = ", ".join(data.get("change_types", [])) or "(unspecified)"
+    affected_modules = ", ".join(data.get("affected_modules", [])) or "(none)"
+    summary = data.get("pr_summary", "")
+    breaking = data.get("breaking_changes", "")
+    migrations = data.get("migrations", "")
+    semver = data.get("semver_suggestion", "")
+    security = data.get("security_notes", "")
+    testing = data.get("testing_updates", "")
+    observability = data.get("observability_updates", "")
+
+    lines = [
+        COMMENT_MARKER,
+        "### Momentum Codex Doc Autopilot",
+        f"**Summary:** {summary}",
+        f"**Change types:** {change_types}",
+        f"**Affected modules:** {affected_modules}",
+        f"**Breaking changes:** {breaking or 'None'}",
+        f"**Migrations:** {migrations or 'None'}",
+        f"**SemVer suggestion:** {semver or 'patch'}",
+        f"**Security notes:** {security or 'None'}",
+        f"**Testing updates:** {testing or 'None'}",
+        f"**Observability updates:** {observability or 'None'}",
+        f"**Labels:** {labels}",
+        f"**Reviewers:** {reviewers}",
+        "**Checklist:**",
+        checklist_block,
+    ]
+    return "\n\n".join(lines)
+
 
 def fetch_existing_comment_id(pr: Dict, token: str, repo: str) -> str | None:
     url = f"https://api.github.com/repos/{repo}/issues/{pr['number']}/comments"
@@ -411,6 +579,7 @@ def fetch_existing_comment_id(pr: Dict, token: str, repo: str) -> str | None:
             if isinstance(c, dict) and COMMENT_MARKER in (c.get("body") or ""):
                 return str(c.get("id"))
     return None
+
 
 def post_comment(pr: Dict, body: str) -> None:
     token = os.environ.get("GITHUB_TOKEN")
@@ -428,7 +597,9 @@ def post_comment(pr: Dict, body: str) -> None:
         url = f"https://api.github.com/repos/{repo}/issues/{pr['number']}/comments"
         gh_post_or_patch(url, token, {"body": body}, method="POST")
 
-# ---------- main ----------
+# --------------------------------------------------------------------------------------
+# Main
+# --------------------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Momentum Codex doc autopilot")
@@ -489,45 +660,10 @@ def main() -> None:
 
     print("Doc autopilot completed successfully")
 
-# ---------- formatting helpers reused (unchanged) ----------
-
-def format_comment(data: Dict) -> str:
-    checklist_lines = [f"- [{'x' if item.get('status') == 'done' else ' '}] {item.get('item')} ({item.get('status')})" for item in data.get("checklist", [])]
-    checklist_block = "\n".join(checklist_lines) if checklist_lines else "- [ ] No follow-up actions identified"
-    labels = ", ".join(data.get("labels", [])) or "(none)"
-    reviewers = ", ".join(data.get("reviewers", [])) or "(none)"
-    change_types = ", ".join(data.get("change_types", [])) or "(unspecified)"
-    affected_modules = ", ".join(data.get("affected_modules", [])) or "(none)"
-    summary = data.get("pr_summary", "")
-    breaking = data.get("breaking_changes", "")
-    migrations = data.get("migrations", "")
-    semver = data.get("semver_suggestion", "")
-    security = data.get("security_notes", "")
-    testing = data.get("testing_updates", "")
-    observability = data.get("observability_updates", "")
-
-    lines = [
-        COMMENT_MARKER,
-        "### Momentum Codex Doc Autopilot",
-        f"**Summary:** {summary}",
-        f"**Change types:** {change_types}",
-        f"**Affected modules:** {affected_modules}",
-        f"**Breaking changes:** {breaking or 'None reported'}",
-        f"**Migrations:** {migrations or 'None'}",
-        f"**SemVer suggestion:** {semver or 'patch'}",
-        f"**Security notes:** {security or 'None'}",
-        f"**Testing updates:** {testing or 'None'}",
-        f"**Observability updates:** {observability or 'None'}",
-        f"**Labels:** {labels}",
-        f"**Reviewers:** {reviewers}",
-        "**Checklist:**",
-        checklist_block,
-    ]
-    return "\n\n".join(lines)
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"::error::{exc}", file=sys.stderr)
         raise

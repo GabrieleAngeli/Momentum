@@ -200,9 +200,15 @@ jobs:
           python-version: "3.11"
 
       - name: Run PR Codex Autopilot
+        if: ${{ github.event.pull_request.head.repo.fork == false }}
+        continue-on-error: true   # <— non bloccare il job in caso di skip/limiti
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MODEL: gpt-4o-mini
+          MAX_DIFF_CHARS: "60000"
+          MAX_CONTEXT_CHARS: "8000"
+          MAX_BODY_CHARS: "3000"
         run: |
           python -m pip install -U pip
           pip install -r tools/ci/requirements.txt
