@@ -70,3 +70,28 @@ The repository ships a ready-to-use [Dev Container](https://containers.dev/) con
 ## Process automation
 - **Ensure issue linking:** workflow that enforces issue references in commits. When missing, it opens a summary ticket and updates the pull request description.
 - **Generate release notes:** manual workflow that creates release note files for the repository and modules, stored under `ReleaseNotes/` with the provided version number.
+
+
+## Backlog & Outstanding Work
+- [ ] Traduzioni
+  - [ ] Sezione di gestione
+  - [ ] Astrazione per l'utilizzo a Front-End
+  - [ ] Astrazione per l'utilizzo in Back-End
+- [ ] Features flag
+  - [ ] Sessione di gestione
+  - [ ] Astrazione per l'utilizzo in Front-End
+  - [ ] Astrazione per l'utilizzo in Back-End
+- [ ] Licencing
+  - [ ] Sessione di gestione
+  - [ ] Astrazione per l'utilizzo in Front-End
+  - [ ] Astrazione per l'utilizzo in Backend
+- [ ] Federetion
+- [ ] Assets
+- [ ] Clienti
+- [ ] Spedizoni
+- [ ] Report
+- [ ] Flow manager
+- [ ] Notifier
+- [ ] Realtime
+- [ ] Stato del sistema
+- [ ] Sentry
