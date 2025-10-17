@@ -22,7 +22,9 @@
               "src/assets"
             ],
             "styles": [],
-            "scripts": []
+            "scripts": [
+              {"test": "ng test --watch=false --code-coverage"}
+            ]
           },
           "configurations": {
             "production": {
