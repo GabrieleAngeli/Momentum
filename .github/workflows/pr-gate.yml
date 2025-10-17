@@ -155,8 +155,8 @@ jobs:
     needs: [ci]
     if: >
       github.event_name == 'pull_request' &&
-      contains(fromJson('["opened","reopened","ready_for_review","labeled"]'), github.event.action) &&
-      !github.event.pull_request.draft
+      !github.event.pull_request.draft &&
+      needs.ci.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -277,15 +277,19 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body = `### Release Notes Preview for **${{ steps.semver.outputs.tag }}**
-            
-            ${ { toString: () => '${{ steps.ghnotes.outputs.body }}' } }
-            `;
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+
+            // Stringhe JSON-escaped valide in JS
+            const notes = ${{ toJSON(steps.ghnotes.outputs.body) }};
+            const tag   = ${{ toJSON(steps.semver.outputs.tag) }};
+
+            const body = `### Release Notes Preview for **${tag}**
+
+            ${notes}`;
+
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              body
+              owner, repo, issue_number: prNumber, body
             });
 
   pr_doc_autopilot:
