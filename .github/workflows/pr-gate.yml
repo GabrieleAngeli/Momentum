@@ -16,7 +16,6 @@ permissions:
   pull-requests: write
   checks: write
   issues: write
-
 jobs:
   ci:
     name: CI and FE Lint Test
@@ -89,15 +88,20 @@ jobs:
       - name: Test with trx
         run: |
           dotnet test Momentum.sln -c Release --no-build \
-            --logger "trx;LogFileName=test-results.trx" \
+            --logger "trx;LogFileName=$(basename $PWD).trx" \
             --results-directory ./test-results
+
+      # (facoltativo ma utile per capire dove finiscono i file)
+      - name: List test results
+        if: always()
+        run: ls -R ./test-results || true
 
       - name: Publish Test Results to Checks
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: Unit Tests
-          path: test-results/*.trx
+          path: ./test-results/**/*.trx   # <— più robusto
           reporter: dotnet-trx
 
       - name: Upload Test Audit
@@ -105,8 +109,9 @@ jobs:
         if: always()
         with:
           name: test-audit
-          path: test-results
+          path: ./test-results
           retention-days: 30
+
 
   issue_linking:
     name: Issue Linking Auto Create
