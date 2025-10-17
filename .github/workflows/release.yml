@@ -197,10 +197,22 @@ jobs:
           if [[ -f "${WEB_DIR}/package.json" ]]; then
             npm ci --prefix "${WEB_DIR}"
             npm run build --prefix "${WEB_DIR}"
-            if [[ -d "${WEB_DIR}/dist" ]] && compgen -G "${WEB_DIR}/dist/*" > /dev/null; then
-              (cd "${WEB_DIR}/dist" && zip -rq "../../${ARTIFACTS_DIR}/web-core-dist.zip" .)
+
+            # risolve output reale (dist/* o dist/*/browser)
+            DIST_ROOT="${WEB_DIR}/dist"
+            if [[ -d "${DIST_ROOT}" ]]; then
+              # se esiste una sottocartella "browser", preferiscila
+              CANDIDATE=$(find "${DIST_ROOT}" -type d -name browser -print -quit)
+              [[ -n "${CANDIDATE}" ]] && DIST_TO_ZIP="${CANDIDATE}" || DIST_TO_ZIP="${DIST_ROOT}"
+
+              # zip verso percorso assoluto per evitare errori di directory
+              OUT_ZIP="${GITHUB_WORKSPACE}/${ARTIFACTS_DIR}/web-core-dist.zip"
+              mkdir -p "$(dirname "${OUT_ZIP}")"
+              (cd "${DIST_TO_ZIP}" && zip -rq "${OUT_ZIP}" .) || {
+                echo "WARN: nothing to zip in ${DIST_TO_ZIP}"
+              }
             else
-              echo "No web-core dist to zip."
+              echo "WARN: ${DIST_ROOT} non esiste; niente zip web-core."
             fi
           fi
 
