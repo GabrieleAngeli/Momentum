@@ -63,8 +63,8 @@ jobs:
         if: always()
         run: |
           npm i -g ajv-cli
-          chmod +x ./contracts/validation.sh
-          ./contracts/validation.sh
+          chmod +x ./contracts/schema-validation.test.sh
+          ./contracts/schema-validation.test.sh
 
       - name: Upload contracts artifact
         uses: actions/upload-artifact@v4
