@@ -5,7 +5,7 @@ import { of } from 'rxjs';
 import { TranslateLoader, TranslateModule } from '@ngx-translate/core';
 
 class TranslateLoaderMock implements TranslateLoader {
-  getTranslation(_: string) {
+  getTranslation() {
     return of({}); // nessuna traduzione, evita HttpClient
   }
 }
