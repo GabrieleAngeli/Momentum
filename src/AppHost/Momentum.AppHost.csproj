@@ -17,9 +17,9 @@
     <PackageReference Include="Aspire.Hosting.Azure.Redis" />
     <PackageReference Include="Aspire.Hosting.NodeJs"/>
 
-    <ProjectReference Include="..\services\identifier\identifier.Api\Identifier.Api.csproj" />
-    <ProjectReference Include="..\services\streamer\streamer.Api\Streamer.Api.csproj" />
-    <ProjectReference Include="..\services\notifier\notifier.Api\Notifier.Api.csproj" />
+    <ProjectReference Include="..\services\identifier\Identifier.Api\Identifier.Api.csproj" />
+    <ProjectReference Include="..\services\streamer\Streamer.Api\Streamer.Api.csproj" />
+    <ProjectReference Include="..\services\notifier\Notifier.Api\Notifier.Api.csproj" />
     <ProjectReference Include="..\services\web-backend-core\WebBackendCore.Api\WebBackendCore.Api.csproj" />
     <ProjectReference Include="..\services\modular-monolith\ModularMonolith.Api\ModularMonolith.Api.csproj" />
 
