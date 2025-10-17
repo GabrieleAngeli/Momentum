@@ -2,3 +2,4 @@ requests>=2.32.0
 PyGithub>=2.3.0
 tenacity>=9.0.0
 python-dotenv>=1.0.1  # se carichi variabili da .env (opzionale)
+openai>=1.0.0
