@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DOTNET_VERSION: 8.0.x
+      DOTNET_VERSION: '8.0.x'
       NODE_VERSION: 20
       SOLUTION: Momentum.sln
       WEB_DIR: src/web-core
       APPHOST_DIR: src/AppHost
-      ARTIFACTS_DIR: artifacts
+      ARTIFACTS_DIR: artifacts  
 
     steps:
       - name: Checkout (full history)
