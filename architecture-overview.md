@@ -25,11 +25,11 @@ flowchart LR
 ```mermaid
 flowchart LR
     subgraph Frontend
-        WebCore[web-core (Angular)]
+        WebCore[web-core - Angular]
     end
     subgraph Backend
-        WebBackend[web-backend-core (.NET)]
-        ModularMonolith[modular-monolith (.NET)]
+        WebBackend[web-backend-core - .NET]
+        ModularMonolith[modular-monolith - .NET]
         Identifier[identifier service]
         Streamer[streamer service]
         Notifier[notifier service]
