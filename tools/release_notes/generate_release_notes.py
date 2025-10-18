@@ -1,272 +1,347 @@
 #!/usr/bin/env python3
-"""Genera file di release note per i moduli del progetto a partire da un intervallo di commit."""
+# -*- coding: utf-8 -*-
+
+"""
+Generate Release Notes (optionally LLM-enriched)
+
+Compatibile con:
+- nuova CLI: --range/--since-tag/--from --to -o/--output --title
+- tua CLI esistente: --base --head --version --out
+
+Esempi:
+  python tools/release_notes/generate_release_notes.py --base origin/main --head HEAD --version v1.2.3 --out ReleaseNotes/v1.2.3.md
+  python tools/release_notes/generate_release_notes.py --range origin/main..HEAD -o release-notes.md --title "Release Notes"
+"""
+
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import json
+import os
 import re
 import subprocess
 import sys
-from collections import defaultdict
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Set
+from typing import Dict, List, Optional, Tuple
 
-import requests
-from tools.release_notes.llm import summarize_diff, classify_risk
+# -----------------------
+# Utilità di sistema
+# -----------------------
 
-ISSUE_PATTERN = re.compile(r"#(\d+)")
+def _run(cmd: List[str], cwd: Optional[str] = None, check: bool = True) -> str:
+    proc = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if check and proc.returncode != 0:
+        raise RuntimeError(f"Command failed: {' '.join(cmd)}\nSTDERR:\n{proc.stderr}")
+    return proc.stdout.strip()
 
+def _now_utc_iso() -> str:
+    return dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
-@dataclass
-class Commit:
-    sha: str
-    subject: str
-    body: str
-    files: Sequence[str]
+# -----------------------
+# Git helpers
+# -----------------------
 
-    @property
-    def short_sha(self) -> str:
-        return self.sha[:7]
-
-    @property
-    def message(self) -> str:
-        if self.body:
-            return f"{self.subject}\n{self.body}".strip()
-        return self.subject
-
-
-@dataclass
-class ModuleReleaseData:
-    issues: Set[int]
-    commits: List[Commit]
-
-
-def run_git(args: Sequence[str], cwd: Optional[Path] = None) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    return result.stdout.strip()
-
-
-def _ref_exists(ref: str) -> bool:
+def _get_last_tag() -> Optional[str]:
     try:
-        run_git(["rev-parse", "--verify", f"{ref}^{{commit}}"])
-        return True
-    except subprocess.CalledProcessError:
-        return False
+        return _run(["git", "describe", "--tags", "--abbrev=0"])
+    except Exception:
+        return None
 
-def _normalize_ref(ref: str) -> str:
-    """Se ref non esiste ma esiste 'v'+ref, usa quello."""
-    if not ref:
-        return ref
-    if _ref_exists(ref):
-        return ref
-    vref = f"v{ref}"
-    return vref if _ref_exists(vref) else ref
+def _resolve_range(args) -> str:
+    """
+    Ordine di precedenza:
+      1) --range
+      2) (--base + --head)
+      3) (--from_ref + --to_ref)
+      4) --since-tag
+      5) <last_tag>..HEAD
+      6) origin/main..HEAD
+    """
+    if args.range:
+        return args.range
+    if args.base or args.head:
+        base = args.base or "HEAD~1000"
+        head = args.head or "HEAD"
+        return f"{base}..{head}"
+    if args.from_ref or args.to_ref:
+        fr = args.from_ref or "HEAD~1000"
+        to = args.to_ref or "HEAD"
+        return f"{fr}..{to}"
+    if args.since_tag:
+        return f"{args.since_tag}..HEAD"
+    last_tag = _get_last_tag()
+    if last_tag:
+        return f"{last_tag}..HEAD"
+    return "origin/main..HEAD"
 
-def determine_commits(base_ref: str, head_ref: str) -> List[str]:
-    base_ref = _normalize_ref(base_ref) if base_ref else base_ref
-    if base_ref:
-        if not _ref_exists(base_ref):
-            print(f"Riferimento di base '{base_ref}' inesistente, considero tutti i commit fino a {head_ref}.", file=sys.stderr)
-            range_spec = head_ref
-        else:
-            range_spec = f"{base_ref}..{head_ref}"
-    else:
-        range_spec = head_ref
-    output = run_git(["rev-list", range_spec])
-    commits = [l for l in output.splitlines() if l]
-    commits.reverse()
+def _git_commits(commit_range: str) -> List[Dict[str, str]]:
+    fmt = "%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e"
+    out = _run(["git", "log", commit_range, f"--pretty=format:{fmt}", "--date=short"], check=True)
+    commits = []
+    for rec in out.split("\x1e"):
+        rec = rec.strip()
+        if not rec:
+            continue
+        parts = rec.split("\x1f")
+        if len(parts) < 5:
+            continue
+        h, author, date, subject, body = parts[:5]
+        commits.append({
+            "hash": h,
+            "author": author,
+            "date": date,
+            "subject": subject.strip(),
+            "body": (body or "").strip(),
+        })
     return commits
 
+# -----------------------
+# Conventional Commits parsing
+# -----------------------
 
-def load_commit(sha: str) -> Commit:
-    pretty_format = "%H%x01%s%x01%b"
-    output = run_git(["show", sha, f"--pretty=format:{pretty_format}", "--name-only"])
-    header, *file_lines = output.splitlines()
-    sha_value, subject, body = header.split("\x01")
-    files = [line.strip() for line in file_lines if line.strip()]
-    return Commit(sha=sha_value, subject=subject.strip(), body=body.strip(), files=files)
+_CONV_RE = re.compile(
+    r"^(?P<type>build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)"
+    r"(?:\((?P<scope>[^)]+)\))?!?:\s*(?P<subject>.+)"
+)
 
+def _parse_conv(msg: str) -> Dict[str, Optional[str]]:
+    head = msg.splitlines()[0].strip()
+    m = _CONV_RE.match(head)
+    if m:
+        t = m.group("type")
+        scope = m.group("scope")
+        subject = m.group("subject").strip()
+        breaking = "!" in head
+        return {"type": t, "scope": scope, "subject": subject, "breaking": "yes" if breaking else None}
+    return {"type": "other", "scope": None, "subject": head, "breaking": None}
 
-def extract_issue_numbers(text: str) -> Set[int]:
-    return {int(match.group(1)) for match in ISSUE_PATTERN.finditer(text)}
+# -----------------------
+# PR context (facoltativo)
+# -----------------------
 
-
-def group_commits_by_module(commits: Sequence[Commit], modules_root: str) -> Dict[str, ModuleReleaseData]:
-    grouped: Dict[str, ModuleReleaseData] = defaultdict(lambda: ModuleReleaseData(set(), []))
-    modules_root_with_sep = modules_root.rstrip("/") + "/"
-
-    for commit in commits:
-        matched_modules: Set[str] = set()
-        for file_path in commit.files:
-            if file_path.startswith(modules_root_with_sep):
-                parts = file_path.split("/")
-                if len(parts) >= 2:
-                    matched_modules.add(parts[1])
-            else:
-                matched_modules.add("__root__")
-        if not matched_modules:
-            matched_modules.add("__root__")
-
-        issues = extract_issue_numbers(commit.message)
-        for module in matched_modules:
-            bucket = grouped[module]
-            bucket.commits.append(commit)
-            bucket.issues.update(issues)
-
-    return grouped
-
-
-def fetch_issue_titles(repo: str, issue_numbers: Iterable[int], token: Optional[str]) -> Dict[int, str]:
-    if not issue_numbers:
+def _load_pr_context() -> Dict[str, str]:
+    path = os.environ.get("GITHUB_EVENT_PATH")
+    if not path or not os.path.exists(path):
         return {}
-    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    titles: Dict[int, str] = {}
-    session = requests.Session()
-    session.headers.update(headers)
-    for number in issue_numbers:
-        response = session.get(f"https://api.github.com/repos/{repo}/issues/{number}", timeout=30)
-        if response.status_code == 404:
-            continue
-        response.raise_for_status()
-        data = response.json()
-        titles[number] = data.get("title", "")
-    return titles
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            ev = json.load(f)
+        pr = ev.get("pull_request") or {}
+        return {
+            "pr_title": pr.get("title", "") or "",
+            "pr_body": pr.get("body", "") or "",
+            "pr_number": str(pr.get("number", "")) or "",
+            "pr_user": (pr.get("user") or {}).get("login", "") or "",
+            "pr_html_url": pr.get("html_url", "") or "",
+        }
+    except Exception:
+        return {}
 
+# -----------------------
+# Rendering
+# -----------------------
 
-def render_release_note(version: str, module: str, data: ModuleReleaseData, issue_titles: Dict[int, str]) -> str:
-    lines = [f"# Release {version}", ""]
-    if data.issues:
-        lines.append("## Issues")
-        for issue in sorted(data.issues):
-            title = issue_titles.get(issue, "")
-            if title:
-                lines.append(f"- #{issue} — {title}")
-            else:
-                lines.append(f"- #{issue}")
-        lines.append("")
-    lines.append("## Commits")
-    for commit in data.commits:
-        lines.append(f"- {commit.short_sha} — {commit.subject}")
+SECTION_ORDER = ["feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "style", "chore", "revert", "other"]
+SECTION_TITLES = {
+    "feat": "✨ Features",
+    "fix": "🐞 Fix",
+    "perf": "⚡ Performance",
+    "refactor": "🧠 Refactor",
+    "docs": "📝 Docs",
+    "test": "🧪 Test",
+    "build": "🏗️ Build",
+    "ci": "🤖 CI",
+    "style": "🎨 Style",
+    "chore": "🧹 Chore",
+    "revert": "⏪ Revert",
+    "other": "🔧 Other",
+}
+
+def _format_commit_line(c: Dict[str, str], parsed: Dict[str, Optional[str]]) -> str:
+    h = c["hash"][:7]
+    scope = f"**{parsed['scope']}**: " if parsed.get("scope") else ""
+    brk = " **(BREAKING)**" if parsed.get("breaking") else ""
+    return f"- {scope}{parsed['subject']} ({h}) by {c['author']}{brk}"
+
+def _summarize(commits: List[Dict[str, str]]) -> Tuple[Dict[str, List[str]], List[str]]:
+    sections: Dict[str, List[str]] = {t: [] for t in SECTION_ORDER}
+    breaking: List[str] = []
+    for c in commits:
+        parsed = _parse_conv(c["subject"])
+        t = parsed["type"] if parsed["type"] in sections else "other"
+        line = _format_commit_line(c, parsed)
+        sections[t].append(line)
+        if parsed.get("breaking"):
+            breaking.append(line)
+    return sections, breaking
+
+def _ensure_trailing_newline(text: str) -> str:
+    text = text.rstrip("\n")
+    return text + "\n"
+
+def _render_markdown(
+    commits: List[Dict[str, str]],
+    pr_ctx: Dict[str, str],
+    title: Optional[str] = None,
+    version: Optional[str] = None,
+) -> str:
+    sections, breaking = _summarize(commits)
+    lines: List[str] = []
+    title = title or (f"Release Notes {version}" if version else "Release Notes")
+
+    lines.append(f"# {title}")
     lines.append("")
-    lines.append("## Dettagli")
-    for commit in data.commits:
-        _s = summarize_diff(commit.sha, commit.subject)
-        _r = classify_risk(commit.sha, commit.subject)
-        if not _s and not (_r and any(_r.values())):
-            continue
-        lines.append(f"### {commit.short_sha}")
-        if _s:
-            lines.append(_s)
-        if _r and any(_r.values()):
-            _flags = []
-            if _r.get("breaking"): _flags.append("**BREAKING**")
-            if _r.get("db_migration"): _flags.append("DB migration")
-            if _r.get("public_api"): _flags.append("Public API")
-            if _flags:
-                lines.append("**Risk:** " + ", ".join(_flags))
+    lines.append(f"_Generated: {_now_utc_iso()}_")
+    lines.append("")
+
+    if version:
+        lines.append(f"**Version**: {version}")
         lines.append("")
-return "\n".join(lines).strip() + "\n"
 
+    if pr_ctx.get("pr_number"):
+        lines.append(f"**PR**: #{pr_ctx['pr_number']} — {pr_ctx.get('pr_title','')}")
+        if pr_ctx.get("pr_html_url"):
+            lines.append(f"**URL**: {pr_ctx['pr_html_url']}")
+        if pr_ctx.get("pr_user"):
+            lines.append(f"**Opened by**: @{pr_ctx['pr_user']}")
+        lines.append("")
 
-def write_release_notes(
-    repo_root: Path,
-    modules_root: str,
-    version: str,
-    grouped: Dict[str, ModuleReleaseData],
-    issue_titles: Dict[int, str],
-    release_dir_name: str,
-) -> List[Path]:
-    created_files: List[Path] = []
-    for module, data in grouped.items():
-        if not data.commits:
+    if breaking:
+        lines.append("## ❗ Breaking Changes")
+        lines.extend(breaking)
+        lines.append("")
+
+    for t in SECTION_ORDER:
+        items = sections.get(t) or []
+        if not items:
             continue
-        if module == "__root__":
-            base_dir = repo_root / release_dir_name
+        lines.append(f"## {SECTION_TITLES.get(t, t.title())}")
+        lines.extend(items)
+        lines.append("")
+
+    if not commits:
+        lines.append("_No changes in the selected range._")
+        lines.append("")
+
+    return _ensure_trailing_newline("\n".join(lines).strip())
+
+# -----------------------
+# LLM enrichment (facoltativo)
+# -----------------------
+
+def _llm_enabled() -> bool:
+    return (os.environ.get("ENABLE_LLM") or "").lower() in ("1", "true", "yes")
+
+def _enrich_with_llm(markdown_notes: str) -> str:
+    if not _llm_enabled():
+        return markdown_notes
+
+    provider = (os.environ.get("LLM_PROVIDER") or "openai").lower()
+    try:
+        import requests  # import locale, niente internet in fase di lint
+        if provider == "azure":
+            api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+            endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+            deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+            if not (api_key and endpoint and deployment):
+                return markdown_notes
+            url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=2024-02-15-preview"
+            headers = {"api-key": api_key, "Content-Type": "application/json"}
         else:
-            base_dir = repo_root / modules_root / module / release_dir_name
-        base_dir.mkdir(parents=True, exist_ok=True)
-        file_path = base_dir / f"{version}.md"
-        file_path.write_text(render_release_note(version, module, data, issue_titles), encoding="utf-8")
-        created_files.append(file_path)
-    return created_files
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                return markdown_notes
+            url = "https://api.openai.com/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
+        prompt = (
+            "Sei un assistente che sintetizza release notes tecniche in italiano, in modo chiaro e conciso. "
+            "Dato il seguente testo Markdown, genera:\n"
+            "1) un paragrafo di sintesi (3-4 frasi);\n"
+            "2) una lista di 3-7 'Highlights' puntati;\n"
+            "3) lascia poi il testo originale intatto sotto la sintesi.\n\n"
+            "Testo:\n" + markdown_notes
+        )
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": "You are a helpful release-notes editor."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 800,
+        }
+        if provider == "azure":
+            payload.pop("model", None)
 
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--release-version", required=True, help="Versione di rilascio (es. 1.2.3).")
-    parser.add_argument("--head-ref", required=True, help="Commit HEAD da includere nel rilascio.")
-    parser.add_argument("--base-ref", help="Commit di partenza escluso dal rilascio.")
-    parser.add_argument(
-        "--modules-root",
-        default="modules",
-        help="Directory contenente i moduli (default: modules).",
-    )
-    parser.add_argument(
-        "--release-dir",
-        default="ReleaseNotes",
-        help="Nome della cartella che conterrà i file di release (default: ReleaseNotes).",
-    )
-    parser.add_argument(
-        "--repo",
-        required=True,
-        help="Repository nel formato <owner>/<name> per recuperare i titoli delle issue.",
-    )
-    parser.add_argument(
-        "--github-token",
-        help="Token GitHub per interrogare le issue e arricchire le release notes.",
-    )
-    parser.add_argument(
-        "--repository-root",
-        default=str(Path(__file__).resolve().parents[2]),
-        help="Percorso della root del repository (default: due livelli sopra lo script).",
-    )
-    return parser.parse_args(argv)
+        resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"].strip()
+        enriched = f"## Sintesi\n{content}\n\n---\n\n" + markdown_notes
+        return _ensure_trailing_newline(enriched)
+    except Exception:
+        # Fail-safe: mai bloccare il job
+        return markdown_notes
 
+# -----------------------
+# CLI / main
+# -----------------------
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = parse_args(argv)
-    repo_root = Path(args.repository_root).resolve()
+def parse_args(argv: Optional[List[str]] = None):
+    p = argparse.ArgumentParser(description="Generate (LLM-enriched) release notes from git history.")
+    # Nuova CLI
+    src = p.add_mutually_exclusive_group(required=False)
+    src.add_argument("--range", dest="range", help="Commit range (es: origin/main..HEAD)")
+    src.add_argument("--since-tag", dest="since_tag", help="Usa <tag>..HEAD")
+    p.add_argument("--from", dest="from_ref", help="Commit/Ref iniziale (usato con --to)")
+    p.add_argument("--to", dest="to_ref", help="Commit/Ref finale (usato con --from)")
+    p.add_argument("-o", "--output", dest="output", help="File di output (default: stdout)")
+    p.add_argument("--title", dest="title", help="Titolo delle note")
 
-    commits_sha = determine_commits(args.base_ref, args.head_ref)
-    if not commits_sha:
-        print("Nessun commit trovato nell'intervallo specificato, nessuna release note generata.")
-        return 0
+    # Compat legacy (tua CLI)
+    p.add_argument("--base", dest="base", help="Base ref per il range (legacy compat)")
+    p.add_argument("--head", dest="head", help="Head ref per il range (legacy compat)")
+    p.add_argument("--version", dest="version", help="Versione da riportare in testa (legacy compat)")
+    p.add_argument("--out", dest="out", help="Percorso file output (alias di --output)")
 
-    commits = [load_commit(sha) for sha in commits_sha]
-    grouped = group_commits_by_module(commits, args.modules_root)
+    # LLM
+    p.add_argument("--no-llm", action="store_true", help="Disabilita arricchimento LLM (ignora ENABLE_LLM)")
+    return p.parse_args(argv)
 
-    all_issues: Set[int] = set()
-    for data in grouped.values():
-        all_issues.update(data.issues)
+def _build_notes(args) -> str:
+    commit_range = _resolve_range(args)
+    commits = _git_commits(commit_range)
+    pr_ctx = _load_pr_context()
 
-    issue_titles = fetch_issue_titles(args.repo, all_issues, args.github_token)
+    # Titolo: priorità a --title, poi "Release Notes {version}" se presente
+    title = args.title or (f"Release Notes {args.version}" if args.version else None)
+    base_text = _render_markdown(commits, pr_ctx, title=title, version=args.version)
 
-    created_files = write_release_notes(
-        repo_root=repo_root,
-        modules_root=args.modules_root,
-        version=args.release_version,
-        grouped=grouped,
-        issue_titles=issue_titles,
-        release_dir_name=args.release_dir,
-    )
+    if args.no_llm:
+        return base_text
+    return _enrich_with_llm(base_text)
 
-    if not created_files:
-        print("Nessun file di release note generato.")
+def _write_output(text: str, path: Optional[str]) -> None:
+    if path:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
     else:
-        print("Generati i seguenti file di release note:")
-        for path in created_files:
-            print(f" - {path.relative_to(repo_root)}")
-    return 0
+        print(text, end="")
 
+def main(argv: Optional[List[str]] = None) -> int:
+    args = parse_args(argv)
+
+    # Normalizza alias legacy
+    output_path = args.output or args.out  # --out è alias
+    try:
+        notes = _build_notes(args)
+        _write_output(notes, output_path)
+        return 0
+    except Exception as ex:
+        sys.stderr.write(f"[release-notes] ERROR: {ex}\n")
+        return 1
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
