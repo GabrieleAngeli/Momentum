@@ -69,7 +69,7 @@ jobs:
         if: always()
         with:
           files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
-        flags: frontend
+          flags: frontend
 
       - name: Validate JSON SCHEMAS (AJV)
         if: always()
@@ -144,7 +144,7 @@ jobs:
       - uses: codecov/codecov-action@v4
         with:
           files: ./test-results/coverage/**/coverage.cobertura.xml
-        flags: backend
+          flags: backend
 
   issue_linking:
     name: Issue Linking Auto Create
