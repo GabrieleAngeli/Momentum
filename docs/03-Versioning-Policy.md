@@ -20,6 +20,6 @@
 
 ## Release notes
 - The manual _Generate release notes_ workflow builds release files from commits between a base ref and the target version.
-- Files land in `ReleaseNotes/` and `modules/<module-name>/ReleaseNotes/` for each affected module.
+- Files land in `ReleaseNotes/` and, when module-specific notes are produced, under `modules/<module-name>/ReleaseNotes/`.
 - Each file lists linked issues and included commits to provide full visibility.
 - During the workflow execution, a commit on `main` is created with the generated notes using the message `chore: add release notes for <version>`.
