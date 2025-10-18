@@ -267,7 +267,7 @@ jobs:
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           echo "base=${BASE_SHA}" >> "$GITHUB_OUTPUT"
           echo "head=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "preview_tag=v0.0.0-rc.PR-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          echo "preview_tag=${{ steps.gv.outputs.semVer }}" >> "$GITHUB_OUTPUT"
 
       - name: Generate LLM-enriched preview notes (Markdown)
         id: gen
