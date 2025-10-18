@@ -257,12 +257,21 @@ jobs:
           subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
           PY
       
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: GitVersion
         id: gv
         uses: GitTools/actions/gitversion/execute@v0.10.2
         with:
-          useConfigFile: true     # se hai GitVersion.yml
-      
+          useConfigFile: false    # 👈 importante
+
+      - name: Set preview tag from GitVersion
+        id: range
+        run: echo "preview_tag=${{ steps.gv.outputs.semVer }}" >> "$GITHUB_OUTPUT"
+        
       - name: Compute PR diff range
         id: range
         shell: bash
