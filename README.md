@@ -23,6 +23,26 @@ Orchestrate the full topology with Aspire:
 dotnet run --project src/AppHost/Momentum.AppHost.csproj
 ```
 
+## Development patterns
+- **Domain-driven design + Clean Architecture:** Each bounded context follows the `Domain → Application → Infrastructure → Api` layering enforced by solution folder structure and shared build props.
+- **Modular monolith first:** New capabilities should be implemented inside the `modular-monolith` service (or as modules under [`modules/`](modules/)). When extraction to independent services is required, keep the public contracts in sync with the modular façade.
+- **Event-driven integration:** Services communicate through Dapr bindings and Kafka topics; long-running workflows are composed via pub/sub events instead of synchronous chains.
+- **Contract-first evolution:** gRPC, OpenAPI and schema artefacts in [`contracts`](contracts/) are versioned and validated in CI/CD to guarantee compatibility across services and modules.
+- **Infrastructure as code:** Local environments rely on Aspire or `docker compose`, while production-ready manifests are authored in Bicep/Terraform (tracked under `infra/`, TODO).
+
+### How to extend the platform
+1. Shape the domain model and contracts inside the appropriate module under [`modules/`](modules/) and [`contracts/`](contracts/).
+2. Implement use cases using CQRS handlers in `Application`, adapters in `Infrastructure`, and façade endpoints in `Api`.
+3. Register Dapr components (bindings, pub/sub) and module metadata (`contracts/web-core/module-manifest.json`).
+4. Cover the feature with unit, integration, and contract tests via `make test` and module-specific pipelines.
+5. Update documentation (`docs/`) and release notes to reflect the new capability.
+
+### Documentation map
+- **Architecture policies:** [`docs/01-Architecture-Policy.md`](docs/01-Architecture-Policy.md) and [`architecture-overview.md`](architecture-overview.md) capture the C4 views and architectural guardrails.
+- **Engineering handbook:** [`docs/02-Coding-Guidelines.md`](docs/02-Coding-Guidelines.md) through [`docs/08-Data-Guidelines.md`](docs/08-Data-Guidelines.md) describe coding, testing, security, observability, and data expectations.
+- **Module playbook:** [`docs/06-Modular-Architecture-Guidelines.md`](docs/06-Modular-Architecture-Guidelines.md) explains how to build and ship modules consistently with the modular monolith.
+- **Process automation:** [`docs/release-process.md`](docs/release-process.md) and CI workflows (`.github/workflows/`) document the release and compliance pipelines.
+
 ## Devcontainer
 The repository ships a ready-to-use [Dev Container](https://containers.dev/) configuration in `.devcontainer/`. It ensures a consistent environment for builds, tests, and security checks. Follow the detailed instructions in [`docs/devcontainer.md`](docs/devcontainer.md).
 
@@ -66,10 +86,10 @@ The repository ships a ready-to-use [Dev Container](https://containers.dev/) con
 - `ReleaseNotes/` collects generated release artefacts per version.
 
 ## Documentation
-- [`architecture-overview.md`](architecture-overview.md) describes the system using the C4 model and highlights how the modular monolith encapsulates domain capabilities behind Dapr endpoints.
-- [`docs/06-Modular-Architecture-Guidelines.md`](docs/06-Modular-Architecture-Guidelines.md) acts as the developer playbook for modular monolith extensions and module onboarding.
-- [`docs/02-Coding-Guidelines.md`](docs/02-Coding-Guidelines.md) and the remaining policies under `docs/` cover day-to-day engineering practices.
-- [`contracts/`](contracts/) holds proto/OpenAPI/event schemas.
+- [`architecture-overview.md`](architecture-overview.md) captures the C4 model and operational views of the platform.
+- [`docs/`](docs/) hosts policies for architecture, coding, testing, security, observability, and data.
+- [`docs/adr/`](docs/adr/) stores Architecture Decision Records.
+- [`contracts/`](contracts/) holds proto/OpenAPI/event schemas and module manifests consumed by clients.
 
 ## Process automation
 - **Ensure issue linking:** workflow that enforces issue references in commits. When missing, it opens a summary ticket and updates the pull request description.
