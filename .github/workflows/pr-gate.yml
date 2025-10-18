@@ -265,9 +265,9 @@ jobs:
             pip install -r tools/release_notes/requirements.txt
           fi
           python - <<'PY'
-import sys, subprocess
-subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-PY
+          import sys, subprocess
+          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+          PY
 
       # GitVersion (per un tag preview leggibile)
       - name: Setup .NET (for GitVersion)
