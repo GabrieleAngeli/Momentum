@@ -36,6 +36,10 @@ The repository ships a ready-to-use [Dev Container](https://containers.dev/) con
 | modular-monolith | Aggregates all backend capabilities via Dapr |
 | web-core | Modular Angular frontend |
 
+### Modules
+
+- [`ticketing`](modules/ticketing/README.md): sample plug-in published via Dapr and exposed to the frontend through [`contracts/web-core/module-manifest.json`](contracts/web-core/module-manifest.json).
+
 ## End-to-end flow
 1. A raw event arrives on `telemetry.input` (Kafka).
 2. The streamer transforms it, persists to Timescale, invalidates Ignite cache, and publishes `telemetry.ingested`.
@@ -73,25 +77,26 @@ The repository ships a ready-to-use [Dev Container](https://containers.dev/) con
 
 
 ## Backlog & Outstanding Work
-- [ ] Traduzioni
-  - [ ] Sezione di gestione
-  - [ ] Astrazione per l'utilizzo a Front-End
-  - [ ] Astrazione per l'utilizzo in Back-End
-- [ ] Features flag
-  - [ ] Sessione di gestione
-  - [ ] Astrazione per l'utilizzo in Front-End
-  - [ ] Astrazione per l'utilizzo in Back-End
-- [ ] Licencing
-  - [ ] Sessione di gestione
-  - [ ] Astrazione per l'utilizzo in Front-End
-  - [ ] Astrazione per l'utilizzo in Backend
-- [ ] Federetion
-- [ ] Assets
-- [ ] Clienti
-- [ ] Spedizoni
-- [ ] Report
-- [ ] Flow manager
-- [ ] Notifier
-- [ ] Realtime
-- [ ] Stato del sistema
-- [ ] Sentry
+- **Internationalisation**
+  - [ ] Gestione delle traduzioni lato backoffice
+  - [ ] Astrazione per l'utilizzo lato frontend
+  - [ ] Astrazione per l'utilizzo lato backend
+- **Feature flags**
+  - [ ] Area di configurazione
+  - [ ] SDK/adapter per il frontend
+  - [ ] SDK/adapter per il backend
+- **Licensing**
+  - [ ] Portale di gestione licenze
+  - [ ] Integrazione lato frontend
+  - [ ] Integrazione lato backend
+- **Platform capabilities**
+  - [ ] Federation runtime hardening
+  - [ ] Gestione asset
+  - [ ] Gestione clienti
+  - [ ] Gestione spedizioni
+  - [ ] Reporting
+  - [ ] Flow manager
+  - [ ] Notifier enhancements
+  - [ ] Realtime hardening
+  - [ ] Stato del sistema
+  - [ ] Integrazione Sentry
