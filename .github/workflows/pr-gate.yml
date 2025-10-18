@@ -269,13 +269,13 @@ jobs:
       - name: Generate LLM-enriched preview notes (Markdown)
         id: gen
         env:
-        ENABLE_LLM: "true"                  # oppure "false"
-        LLM_PROVIDER: "openai"              # oppure "azure"
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        # Per Azure:
-        # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-        # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-        # AZURE_OPENAI_DEPLOYMENT: "gpt-4o-mini
+          ENABLE_LLM: "true"                  # oppure "false"
+          LLM_PROVIDER: "openai"              # oppure "azure"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Per Azure:
+          # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          # AZURE_OPENAI_DEPLOYMENT: "gpt-4o-mini
         run: |
           set -euo pipefail
           mkdir -p ReleaseNotes
