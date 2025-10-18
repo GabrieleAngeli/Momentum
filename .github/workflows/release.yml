@@ -179,7 +179,8 @@ jobs:
           echo "file=${OUT}" >> "$GITHUB_OUTPUT"
 
       - name: Create tag
-        env: { TAG: ${{ steps.semver.outputs.tag }} }
+        env: 
+          TAG: ${{ steps.semver.outputs.tag }}
         run: |
           set -euo pipefail
           git tag -a "${TAG}" -m "Release ${TAG}" || true
