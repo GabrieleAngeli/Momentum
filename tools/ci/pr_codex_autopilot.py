@@ -98,7 +98,6 @@ def load_prompt_template(path: Path) -> str:
 
 
 def render_user_prompt(template: str, values: Dict[str, str]) -> str:
-    prompt = template
     # rinforzo: limitiamo il modello a DOC ONLY
     guard = (
         "\n\nIMPORTANT: Generate ONLY documentation changes. "
@@ -241,8 +240,46 @@ def collect_commit_subjects(max_count: int = 10) -> str:
     return output.strip()
 
 # --------------------------------------------------------------------------------------
-# Model calls
+# Model calls + JSON handling (robust)
 # --------------------------------------------------------------------------------------
+
+def _normalize_result(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Assicura tutte le chiavi e i tipi attesi; mai eccezioni per campi mancanti."""
+    defaults: Dict[str, Any] = {
+        "pr_summary": "",
+        "change_types": [],
+        "affected_modules": [],
+        "breaking_changes": "",
+        "migrations": "",
+        "semver_suggestion": "patch",
+        "security_notes": "",
+        "testing_updates": "",
+        "observability_updates": "",
+        "labels": [],
+        "reviewers": [],
+        "checklist": [],
+        "changelog_entry": "",
+        "adr": {},
+        "doc_patches": [],
+    }
+    out = {**defaults, **(data or {})}
+
+    # Coercizioni leggere
+    for k in ("change_types", "affected_modules", "labels", "reviewers", "checklist", "doc_patches"):
+        if not isinstance(out.get(k), list):
+            out[k] = []
+    if not isinstance(out.get("adr"), dict):
+        out["adr"] = {}
+
+    return out
+
+
+def _parse_json_or_raise(content: str) -> Dict[str, Any]:
+    cleaned = (content or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = "\n".join(cleaned.splitlines()[1:-1]).strip()
+    return json.loads(cleaned)
+
 
 def call_model(system_prompt: str, user_prompt: str) -> Dict:
     provider = os.environ.get("CODEX_PROVIDER", "openai").lower()
@@ -273,7 +310,7 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY is required when CODEX_PROVIDER=openai")
         try:
-            from openai import OpenAI  # type: ignore
+            from openai import OpenAI  # SDK v2+
         except ImportError as e:
             raise RuntimeError("Python package 'openai' is not installed. Add `openai>=1.0.0` to tools/ci/requirements.txt.") from e
 
@@ -284,18 +321,38 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
         client = OpenAI(**client_kwargs)
 
         prompt = user_prompt
+        # fino a 3 tentativi: shrink prompt su rate/size, 1 retry di "riparazione JSON"
         for attempt in range(3):
             try:
                 resp = client.chat.completions.create(
                     model=model,
-                    temperature=0.2,
+                    temperature=float(os.environ.get("TEMPERATURE", "0.2")),
+                    max_tokens=int(os.environ.get("MAX_BODY_CHARS", "2000")),
+                    response_format={"type": "json_object"},  # <— forza JSON valido
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt},
                     ],
                 )
-                content = resp.choices[0].message.content
-                return parse_json_response(content)
+                content = (resp.choices[0].message.content or "").strip()
+                try:
+                    data = _parse_json_or_raise(content)
+                    return _normalize_result(data)
+                except json.JSONDecodeError:
+                    # Retry di riparazione: chiedi SOLO JSON minificato
+                    repair = client.chat.completions.create(
+                        model=model,
+                        temperature=0.0,
+                        max_tokens=int(os.environ.get("MAX_BODY_CHARS", "2000")),
+                        response_format={"type": "json_object"},
+                        messages=[
+                            {"role": "system", "content": "You MUST return a single valid JSON object. No markdown, no comments."},
+                            {"role": "user", "content": f"Fix and return a valid JSON object from this text (if needed, complete missing brackets/commas):\n{content}"},
+                        ],
+                    )
+                    fixed = (repair.choices[0].message.content or "").strip()
+                    data = _parse_json_or_raise(fixed)
+                    return _normalize_result(data)
             except Exception as e:
                 msg = str(e).lower()
                 if "rate limit" in msg or "request too large" in msg or "tpm" in msg:
@@ -303,7 +360,10 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
                     prompt = shrink_prompt(prompt, factor)
                     time.sleep(2 + attempt * 2)
                     continue
-                raise
+                # altri errori → non bloccare l'intero job, ritorna payload vuoto
+                print(f"[doc-autopilot] LLM error: {e}", file=sys.stderr)
+                return _success_empty()
+
         print("[doc-autopilot] Model call failed due to limits after retries. Skipping doc generation.", file=sys.stderr)
         return _success_empty()
 
@@ -314,7 +374,8 @@ def call_model(system_prompt: str, user_prompt: str) -> Dict:
             msg = str(e).lower()
             if "rate limit" in msg or "too large" in msg:
                 return call_http_compatible_model(model, system_prompt, shrink_prompt(user_prompt, 0.5))
-            raise
+            print(f"[doc-autopilot] HTTP-compatible model error: {e}", file=sys.stderr)
+            return _success_empty()
 
     raise RuntimeError(f"Unsupported CODEX_PROVIDER '{provider}'")
 
@@ -340,6 +401,9 @@ def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str)
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
+        # Molti gateway già supportano response_format: json_object;
+        # se il tuo lo supporta, puoi aggiungere:
+        # "response_format": {"type": "json_object"},
     }
     response = requests.post(endpoint, json=payload, headers=headers, timeout=timeout)
     if response.status_code >= 400:
@@ -357,40 +421,10 @@ def call_http_compatible_model(model: str, system_prompt: str, user_prompt: str)
     message = choices[0].get("message") if isinstance(choices[0], dict) else None
     if not isinstance(message, dict) or "content" not in message:
         raise RuntimeError("Model gateway response missing message content")
-    return parse_json_response(message["content"])
 
-
-def parse_json_response(content: str) -> Dict:
-    cleaned = content.strip()
-    if cleaned.startswith("```"):
-        cleaned = "\n".join(cleaned.splitlines()[1:-1]).strip()
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Model response is not valid JSON: {exc}\n{cleaned}") from exc
-    required_keys = {
-        "pr_summary",
-        "change_types",
-        "affected_modules",
-        "breaking_changes",
-        "migrations",
-        "semver_suggestion",
-        "security_notes",
-        "testing_updates",
-        "observability_updates",
-        "labels",
-        "reviewers",
-        "checklist",
-        "changelog_entry",
-        "adr",
-        "doc_patches",
-    }
-    missing = required_keys - set(data.keys())
-    if missing:
-        raise ValueError(f"Model response missing keys: {sorted(missing)}")
-    if not isinstance(data.get("doc_patches"), list):
-        raise ValueError("doc_patches must be an array")
-    return data
+    # Prova a parse-are e normalizzare
+    parsed = _parse_json_or_raise(message["content"])
+    return _normalize_result(parsed)
 
 # --------------------------------------------------------------------------------------
 # Patch / changelog helpers
@@ -535,8 +569,9 @@ def apply_doc_updates(doc_patches: List[Dict], adr_payload: Dict, changelog_entr
 
 def format_comment(data: Dict) -> str:
     checklist_lines = [
-        f"- [{'x' if item.get('status') == 'done' else ' '}] {item.get('item')} ({item.get('status')})"
+        f"- [{'x' if (item.get('status') == 'done' or item.get('done') is True) else ' '}] {item.get('item')} ({item.get('status', 'todo')})"
         for item in data.get("checklist", [])
+        if isinstance(item, dict)
     ]
     checklist_block = "\n".join(checklist_lines) if checklist_lines else "- [ ] No follow-up actions identified"
     labels = ", ".join(data.get("labels", [])) or "(none)"
