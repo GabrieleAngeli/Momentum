@@ -71,7 +71,7 @@ jobs:
           files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
           flags: frontend
 
-      - name: Validate JSON Schemas (AJV)
+      - name: Validate JSON ScheMAS (AJV)
         if: always()
         run: |
           npm i -g ajv-cli
@@ -108,7 +108,10 @@ jobs:
         run: |
           mkdir -p ./test-results
           mkdir -p ./test-results/coverage
-          dotnet test Momentum.sln -c Release             --logger "trx"             --results-directory ./test-results             --collect:"XPlat Code Coverage"
+          dotnet test Momentum.sln -c Release \
+            --logger "trx" \
+            --results-directory ./test-results \
+            --collect:"XPlat Code Coverage"
 
       - name: List results
         if: always()
@@ -125,7 +128,10 @@ jobs:
       - name: Generate coverage report (ReportGenerator)
         run: |
           dotnet tool update -g dotnet-reportgenerator-globaltool
-          reportgenerator             -reports:"./test-results/**/coverage.cobertura.xml"             -targetdir:"./test-results/coveragereport"             -reporttypes:"Html;TextSummary"
+          reportgenerator \
+            -reports:"./test-results/**/coverage.cobertura.xml" \
+            -targetdir:"./test-results/coveragereport" \
+            -reporttypes:"Html;TextSummary"
           cat ./test-results/coveragereport/Summary.txt || true
 
       - name: Upload coverage artifact (.NET)
@@ -170,7 +176,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python tools/issue_management/ensure_issue_links.py             --repo "${{ github.repository }}"             --pr-number "${{ github.event.pull_request.number }}"             --auto-create
+          python tools/issue_management/ensure_issue_links.py \
+            --repo "${{ github.repository }}" \
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --auto-create
 
   pr_doc_autopilot:
     name: PR Doc Autopilot Commit Push
@@ -200,7 +209,9 @@ jobs:
         run: |
           python -m pip install -U pip
           pip install -r tools/ci/requirements.txt
-          python tools/ci/pr_codex_autopilot.py             --pr "${{ github.event.pull_request.number }}"             --repo "${{ github.repository }}"
+          python tools/ci/pr_codex_autopilot.py \
+            --pr "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}"
 
       - name: Commit changes if any
         id: commit_changes
@@ -216,6 +227,7 @@ jobs:
           fi
 
       - name: Push changes
+        if: steps.commit_changes.outputs.did_commit == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -253,27 +265,22 @@ jobs:
             pip install -r tools/release_notes/requirements.txt
           fi
           python - <<'PY'
-          import sys, subprocess
-          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-          PY
-      
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+import sys, subprocess
+subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+PY
 
       - name: GitVersion
         id: gv
         uses: GitTools/actions/gitversion/execute@v0.10.2
         with:
-          useConfigFile: false    # 👈 importante
+          useConfigFile: false
 
       - name: Set preview tag from GitVersion
-        id: range
+        id: preview_tag
         run: echo "preview_tag=${{ steps.gv.outputs.semVer }}" >> "$GITHUB_OUTPUT"
-        
+
       - name: Compute PR diff range
-        id: range
+        id: pr_range
         shell: bash
         run: |
           set -euo pipefail
@@ -281,44 +288,31 @@ jobs:
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           echo "base=${BASE_SHA}" >> "$GITHUB_OUTPUT"
           echo "head=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "preview_tag=${{ steps.gv.outputs.semVer }}" >> "$GITHUB_OUTPUT"
 
       - name: Generate LLM-enriched preview notes (Markdown)
         id: gen
         env:
-          ENABLE_LLM: "true" # oppure "false"
-          LLM_PROVIDER: "openai" # oppure "azure"
+          ENABLE_LLM: "true"
+          LLM_PROVIDER: "openai"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # Per Azure:
-          # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          # AZURE_OPENAI_DEPLOYMENT: "gpt-4o-mini
         run: |
           set -euo pipefail
           mkdir -p ReleaseNotes
-          OUT="ReleaseNotes/${{ steps.range.outputs.preview_tag }}.md"
+          OUT="ReleaseNotes/${{ steps.preview_tag.outputs.preview_tag }}.md"
           python tools/release_notes/generate_release_notes.py \
-            --base "${{ steps.range.outputs.base }}" \
-            --head "${{ steps.range.outputs.head }}" \
-            --version "${{ steps.range.outputs.preview_tag }}" \
+            --base "${{ steps.pr_range.outputs.base }}" \
+            --head "${{ steps.pr_range.outputs.head }}" \
+            --version "${{ steps.preview_tag.outputs.preview_tag }}" \
             --out "${OUT}"
           echo "file=${OUT}" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-          fetch-depth: 0
-          ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ github.token }}
 
       - name: Commit preview file on PR branch
         id: push_preview
         env:
           FILE: ${{ steps.gen.outputs.file }}
-          REPO: ${{ github.repository }} # org/repo
-          BRANCH: ${{ github.head_ref }} # es. feature/test-integrazione
-          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
           set -euo pipefail
@@ -330,28 +324,22 @@ jobs:
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Autenticazione remota con token
           git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
 
-          # Sanity check: dove siamo e chi siamo
           git status
           git rev-parse --abbrev-ref HEAD
 
-          # Vai sul branch della PR
           git switch "${BRANCH}"
 
-          # Aggiungi e committa solo se ci sono modifiche
           git add "${FILE}"
           if ! git diff --cached --quiet; then
-            git commit -m "docs(release): add LLM preview notes for ${{ steps.range.outputs.preview_tag }}"
+            git commit -m "docs(release): add LLM preview notes for ${{ steps.preview_tag.outputs.preview_tag }}"
             git push origin "HEAD:${BRANCH}"
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           else
             echo "Nessuna modifica da committare."
             echo "pushed=false" >> "$GITHUB_OUTPUT"
           fi
-
 
       - name: Comment preview on PR (fallback)
         if: ${{ github.event.pull_request.head.repo.fork || steps.push_preview.outputs.pushed != 'true' }}
@@ -368,15 +356,13 @@ jobs:
             const fs = require('fs');
 
             const header = '### Release Notes Preview for';
-            const tag = `${{ toJSON(steps.range.outputs.preview_tag) }}`;
+            const tag = `${{ toJSON(steps.preview_tag.outputs.preview_tag) }}`;
             const path = `${{ toJSON(steps.gen.outputs.file) }}`;
 
             let notes = '';
             try { notes = fs.readFileSync(path, 'utf-8'); } catch {}
 
-            const payload = `${header} **${tag}**
-
-            ${notes || '_No changes detected for this PR range._'}`;
+            const payload = `${header} **${tag}**\n\n${notes || '_No changes detected for this PR range._'}`;
 
             const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 });
             const existing = comments.data.find(c =>
