@@ -26,17 +26,14 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
+        with: { dotnet-version: 8.0.x }
 
       - name: Restore .NET
         run: dotnet restore Momentum.sln
@@ -46,8 +43,7 @@ jobs:
 
       - name: Setup Node
         uses: actions/setup-node@v4
-        with:
-          node-version: 20
+        with: { node-version: 20 }
 
       - name: NPM install web-core
         run: npm ci --prefix src/web-core
@@ -71,7 +67,7 @@ jobs:
           files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
           flags: frontend
 
-      - name: Validate JSON SCHEMAS (AJV)
+      - name: Validate JSON Schemas (AJV)
         if: always()
         run: |
           npm i -g ajv-cli
@@ -95,8 +91,7 @@ jobs:
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
+        with: { dotnet-version: 8.0.x }
 
       - name: Restore .NET
         run: dotnet restore Momentum.sln
@@ -106,8 +101,7 @@ jobs:
 
       - name: Test (.NET) with coverage (Coverlet)
         run: |
-          mkdir -p ./test-results
-          mkdir -p ./test-results/coverage
+          mkdir -p ./test-results ./test-results/coverage
           dotnet test Momentum.sln -c Release \
             --logger "trx" \
             --results-directory ./test-results \
@@ -157,13 +151,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
 
       - name: Setup Python
         uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+        with: { python-version: "3.11" }
 
       - name: Install deps
         run: |
@@ -188,13 +180,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
 
       - name: Setup Python
         uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+        with: { python-version: "3.11" }
 
       - name: Run PR Codex Autopilot
         if: ${{ github.event.pull_request.head.repo.fork == false }}
@@ -248,15 +238,12 @@ jobs:
       - name: Checkout (full history)
         uses: actions/checkout@v4
         with:
-          persist-credentials: true
           fetch-depth: 0
           ref: ${{ github.head_ref || github.ref_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+        with: { python-version: "3.11" }
 
       - name: Install release-notes deps
         run: |
@@ -269,84 +256,45 @@ jobs:
           subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
           PY
 
-      # GitVersion (per un tag preview leggibile)
-      - name: Setup .NET (for GitVersion)
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Install GitVersion
-        uses: GitTools/actions/gitversion/setup@v0.10.2
-        with:
-          versionSpec: '5.x'
-
-      - name: GitVersion
-        id: gv
-        uses: GitTools/actions/gitversion/execute@v0.10.2
-        with:
-          useConfigFile: false
-
-      - name: Set preview tag from GitVersion
-        id: preview_tag
-        run: echo "preview_tag=${{ steps.gv.outputs.semVer }}" >> "$GITHUB_OUTPUT"
-
+      # Intervallo PR (base→head), nessuna versione qui
       - name: Compute PR diff range
         id: pr_range
         shell: bash
         run: |
           set -euo pipefail
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          echo "base=${BASE_SHA}" >> "$GITHUB_OUTPUT"
-          echo "head=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          echo "name=PR-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
 
-      - name: Generate LLM-enriched preview notes (Markdown)
+      - name: Generate preview notes (Markdown)
         id: gen
         env:
-          ENABLE_LLM: "true"
-          LLM_PROVIDER: "openai"
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ENABLE_LLM: "true"                # ⇦ ON/OFF qui (true/false)
+          LLM_PROVIDER: "openai"            # "openai" oppure "azure"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # ⇦ per OpenAI
+
+          # Se usi Azure al posto di OpenAI, lascia ENABLE_LLM="true" e imposta:
+          # LLM_PROVIDER: "azure"
+          # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          # AZURE_OPENAI_DEPLOYMENT: "gpt-4o-mini"  # nome deployment
+
+          # Modello/temperatura opzionali (OpenAI o Azure)
+          LLM_MODEL: "gpt-4o-mini"
+          LLM_TEMPERATURE: "0.2"
         run: |
           set -euo pipefail
           mkdir -p ReleaseNotes
-          OUT="ReleaseNotes/${{ steps.preview_tag.outputs.preview_tag }}.md"
+          OUT="ReleaseNotes/${{ steps.pr_range.outputs.name }}.md"
           python tools/release_notes/generate_release_notes.py \
             --base "${{ steps.pr_range.outputs.base }}" \
             --head "${{ steps.pr_range.outputs.head }}" \
-            --version "${{ steps.preview_tag.outputs.preview_tag }}" \
+            --version "Preview for PR #${{ github.event.pull_request.number }}" \
             --out "${OUT}"
           echo "file=${OUT}" >> "$GITHUB_OUTPUT"
 
-      # NIENTE push sul branch PR: usiamo solo i commenti sticky
+      # Pubblica come sticky comment (no push su branch → niente 403)
       - name: Comment preview on PR (sticky file)
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           path: ${{ steps.gen.outputs.file }}
-
-      - name: Comment preview on PR (sticky rich)
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const prNumber = context.payload.pull_request.number;
-            const fs = require('fs');
-
-            const header = '### Release Notes Preview for';
-            const tag = `${{ toJSON(steps.preview_tag.outputs.preview_tag) }}`;
-            const path = `${{ toJSON(steps.gen.outputs.file) }}`;
-
-            let notes = '';
-            try { notes = fs.readFileSync(path, 'utf-8'); } catch {}
-
-            const payload = `${header} **${tag}**\n\n${notes || '_No changes detected for this PR range._'}`;
-
-            const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 });
-            const existing = comments.data.find(c =>
-              c.user?.type === 'Bot' && typeof c.body === 'string' && c.body.includes(header)
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: payload });
-            } else {
-              await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body: payload });
-            }
