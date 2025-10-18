@@ -69,7 +69,7 @@ jobs:
         if: always()
         with:
           files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
-          flags: frontend
+        flags: frontend
 
       - name: Validate JSON SCHEMAS (AJV)
         if: always()
