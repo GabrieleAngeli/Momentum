@@ -216,7 +216,6 @@ jobs:
           fi
 
       - name: Push changes
-        if: steps.commit_changes.outputs.did_commit == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
