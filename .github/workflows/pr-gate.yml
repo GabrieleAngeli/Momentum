@@ -143,11 +143,11 @@ jobs:
   issue_linking:
     name: Issue Linking Auto Create
     runs-on: ubuntu-latest
-    needs: [ci]
+    needs: [test_dotnet]
     if: >
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft &&
-      needs.ci.result == 'success'
+      needs.test_dotnet.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -175,7 +175,7 @@ jobs:
   pr_doc_autopilot:
     name: PR Doc Autopilot Commit Push
     runs-on: ubuntu-latest
-    needs: [ci]
+    needs: [issue_linking]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -216,7 +216,6 @@ jobs:
           fi
 
       - name: Push changes
-        if: steps.commit_changes.outputs.did_commit == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -225,7 +224,7 @@ jobs:
   release_notes_preview:
     name: Release Notes Preview (LLM enriched, sticky)
     runs-on: ubuntu-latest
-    needs: [ci, test_dotnet]
+    needs: [test_dotnet, issue_linking, pr_doc_autopilot]
     permissions:
       contents: read
       pull-requests: write
@@ -237,7 +236,10 @@ jobs:
       - name: Checkout (full history)
         uses: actions/checkout@v4
         with:
+          persist-credentials: true
           fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -251,10 +253,16 @@ jobs:
             pip install -r tools/release_notes/requirements.txt
           fi
           python - <<'PY'
-import sys, subprocess
-subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-PY
-
+          import sys, subprocess
+          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+          PY
+      
+      - name: GitVersion
+        id: gv
+        uses: GitTools/actions/gitversion/execute@v0.10.2
+        with:
+          useConfigFile: true     # se hai GitVersion.yml
+      
       - name: Compute PR diff range
         id: range
         shell: bash
@@ -264,31 +272,83 @@ PY
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           echo "base=${BASE_SHA}" >> "$GITHUB_OUTPUT"
           echo "head=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "preview_tag=v0.0.0-rc.PR-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          echo "preview_tag=${{ steps.gv.outputs.semVer }}" >> "$GITHUB_OUTPUT"
 
       - name: Generate LLM-enriched preview notes (Markdown)
         id: gen
+        env:
+          ENABLE_LLM: "true" # oppure "false"
+          LLM_PROVIDER: "openai" # oppure "azure"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Per Azure:
+          # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          # AZURE_OPENAI_DEPLOYMENT: "gpt-4o-mini
         run: |
           set -euo pipefail
           mkdir -p ReleaseNotes
           OUT="ReleaseNotes/${{ steps.range.outputs.preview_tag }}.md"
-          python tools/release_notes/generate_release_notes.py             --base "${{ steps.range.outputs.base }}"             --head "${{ steps.range.outputs.head }}"             --version "${{ steps.range.outputs.preview_tag }}"             --out "${OUT}"
+          python tools/release_notes/generate_release_notes.py \
+            --base "${{ steps.range.outputs.base }}" \
+            --head "${{ steps.range.outputs.head }}" \
+            --version "${{ steps.range.outputs.preview_tag }}" \
+            --out "${OUT}"
           echo "file=${OUT}" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ github.token }}
+
       - name: Commit preview file on PR branch
-        if: ${{ github.event.pull_request.head.repo.fork == false }}
+        id: push_preview
+        env:
+          FILE: ${{ steps.gen.outputs.file }}
+          REPO: ${{ github.repository }} # org/repo
+          BRANCH: ${{ github.head_ref }} # es. feature/test-integrazione
+          TOKEN: ${{ github.token }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
           set -euo pipefail
-          BRANCH="${{ github.head_ref }}"
-          FILE="${{ steps.gen.outputs.file }}"
+
+          if [ "${IS_FORK}" = "true" ]; then
+            echo "PR da fork: push disabilitato per sicurezza." >&2
+            exit 0
+          fi
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Autenticazione remota con token
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+
+          # Sanity check: dove siamo e chi siamo
+          git status
+          git rev-parse --abbrev-ref HEAD
+
+          # Vai sul branch della PR
           git switch "${BRANCH}"
+
+          # Aggiungi e committa solo se ci sono modifiche
           git add "${FILE}"
           if ! git diff --cached --quiet; then
             git commit -m "docs(release): add LLM preview notes for ${{ steps.range.outputs.preview_tag }}"
-            git push origin "${BRANCH}"
+            git push origin "HEAD:${BRANCH}"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nessuna modifica da committare."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
           fi
+
+
+      - name: Comment preview on PR (fallback)
+        if: ${{ github.event.pull_request.head.repo.fork || steps.push_preview.outputs.pushed != 'true' }}
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: ${{ steps.gen.outputs.file }}
 
       - name: Comment preview on PR (sticky)
         uses: actions/github-script@v7
@@ -307,7 +367,7 @@ PY
 
             const payload = `${header} **${tag}**
 
-${notes || '_No changes detected for this PR range._'}`;
+            ${notes || '_No changes detected for this PR range._'}`;
 
             const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 });
             const existing = comments.data.find(c =>
