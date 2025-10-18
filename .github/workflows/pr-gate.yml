@@ -71,7 +71,7 @@ jobs:
           files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
           flags: frontend
 
-        - name: Validate JSON ScheMAS (AJV)
+      - name: Validate JSON ScheMAS (AJV)
         if: always()
         run: |
           npm i -g ajv-cli
