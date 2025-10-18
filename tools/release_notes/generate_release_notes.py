@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set
 
 import requests
+from tools.release_notes.llm import summarize_diff, classify_risk
 
 ISSUE_PATTERN = re.compile(r"#(\d+)")
 
@@ -157,10 +158,23 @@ def render_release_note(version: str, module: str, data: ModuleReleaseData, issu
         lines.append(f"- {commit.short_sha} — {commit.subject}")
     lines.append("")
     lines.append("## Dettagli")
-    lines.append(
-        "Ogni commit elencato include nel messaggio il riferimento alla issue corrispondente."
-    )
-    return "\n".join(lines).strip() + "\n"
+    for commit in data.commits:
+        _s = summarize_diff(commit.sha, commit.subject)
+        _r = classify_risk(commit.sha, commit.subject)
+        if not _s and not (_r and any(_r.values())):
+            continue
+        lines.append(f"### {commit.short_sha}")
+        if _s:
+            lines.append(_s)
+        if _r and any(_r.values()):
+            _flags = []
+            if _r.get("breaking"): _flags.append("**BREAKING**")
+            if _r.get("db_migration"): _flags.append("DB migration")
+            if _r.get("public_api"): _flags.append("Public API")
+            if _flags:
+                lines.append("**Risk:** " + ", ".join(_flags))
+        lines.append("")
+return "\n".join(lines).strip() + "\n"
 
 
 def write_release_notes(

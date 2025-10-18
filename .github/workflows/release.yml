@@ -50,9 +50,7 @@ jobs:
           LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           if [[ -z "${LAST_TAG}" ]]; then LAST_TAG="v0.1.0"; fi
           BASE="${LAST_TAG#v}"
-
           COMMITS="$(git log --pretty=format:%s "${LAST_TAG}..HEAD" || true)"
-
           BUMP="patch"
           if echo "${COMMITS}" | grep -Eqi 'BREAKING CHANGE|!:' ; then
             BUMP="major"
@@ -63,19 +61,18 @@ jobs:
           else
             if [[ -n "${COMMITS}" ]]; then BUMP="patch"; fi
           fi
-
           IFS='.' read -r MA MI PA <<< "${BASE}"
           case "${BUMP}" in
             major) MA=$((MA+1)); MI=0; PA=0;;
             minor) MI=$((MI+1)); PA=0;;
             patch) PA=$((PA+1));;
           esac
-
           NEW_VERSION="${MA}.${MI}.${PA}"
           echo "new_version=${NEW_VERSION}"           >> "$GITHUB_OUTPUT"
           echo "release_branch=release/v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${NEW_VERSION}"                  >> "$GITHUB_OUTPUT"
 
+      # CREATE/UPDATE release branch BEFORE generating notes
       - name: Create / update release branch
         env:
           REL: ${{ steps.semver.outputs.release_branch }}
@@ -93,76 +90,6 @@ jobs:
           fi
           git push --force-with-lease origin "$REL"
 
-      - name: Generate cumulative release notes
-        id: relnotes
-        uses: actions/github-script@v7
-        continue-on-error: true
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const tag = ${{ toJSON(steps.semver.outputs.tag) }};               // es. "v1.2.3"
-            // = ${{ toJSON(steps.semver.outputs.release_branch) }}; // es. "release/v1.2.3"
-            const target = "main";
-
-            // Usa l'exec fornito dall'action (NON ridefinire 'exec')
-            let lastTag = "v0.1.0";
-            {
-              const res = await exec.getExecOutput('git', ['describe', '--tags', '--abbrev=0'], { ignoreReturnCode: true });
-              if (res.exitCode === 0 && res.stdout.trim()) lastTag = res.stdout.trim();
-            }
-            core.info(`Base tag for notes: ${lastTag} -> ${target}`);
-
-            // Confronta commit tra ultimo tag e HEAD della release branch
-            //const cmp = await github.rest.repos.compareCommits({
-            //  owner, repo, base: lastTag, head: target
-            //});
-
-            let commits = [];
-            try {
-              const cmp = await github.rest.repos.compareCommits({ owner, repo, base: lastTag, head: target });
-              commits = (cmp.data.commits || []).map(...);
-            } catch (e) {
-              core.warning(`compareCommits failed: ${e.message}`);
-            }
-
-            const buckets = { feat:[], fix:[], perf:[], refactor:[], docs:[], chore:[], ci:[], test:[], style:[], revert:[], other:[] };
-            for (const msg of commits) {
-              const m = msg.match(/^(\w+)(\([\w\-\./]+\))?:(.*)$/);
-              if (m && buckets[m[1]]) buckets[m[1]].push(msg);
-              else buckets.other.push(msg);
-            }
-            const section = (title, arr) => arr.length ? `### ${title}\n` + arr.map(s => `- ${s}`).join('\n') + '\n\n' : '';
-
-            // PR mergiati nel periodo (best-effort per intervallo temporale)
-            let prLines = [];
-            try {
-              const mergedSince = cmp.data.base_commit?.commit?.author?.date ?? new Date(Date.now()-30*86400000).toISOString();
-              const mergedUntil = new Date().toISOString();
-              const q = `repo:${owner}/${repo} is:pr is:merged merged:${mergedSince}..${mergedUntil}`;
-              const res = await github.rest.search.issuesAndPullRequests({ q, per_page: 100 });
-              prLines = (res.data.items || []).map(p => `- #${p.number} ${p.title}`);
-            } catch (e) {
-              core.warning(`PR search failed: ${e.message}`);
-            }
-
-            let body = '';
-            body += `## ${tag}\n\n`;
-            body += `**Range:** ${lastTag} → ${target}\n\n`;
-            body += section('Features',  buckets.feat);
-            body += section('Fixes',     buckets.fix);
-            body += section('Performance', buckets.perf);
-            body += section('Refactor',  buckets.refactor);
-            body += section('Docs',      buckets.docs);
-            body += section('CI',        buckets.ci);
-            body += section('Tests',     buckets.test);
-            body += section('Chore',     buckets.chore);
-            body += section('Style',     buckets.style);
-            body += section('Revert',    buckets.revert);
-            body += section('Other',     buckets.other);
-            if (prLines.length) body += `### Merged PRs\n${prLines.join('\n')}\n`;
-
-            core.setOutput('body', body);
-
       - name: Bump version in solution (best-effort)
         env:
           VERSION: ${{ steps.semver.outputs.new_version }}
@@ -178,17 +105,14 @@ jobs:
             git add -A
             git commit -m "chore(release): bump version to v${VERSION}"
           fi
+          git push origin "${{ steps.semver.outputs.release_branch }}" || true
 
       - name: Build artifacts
         run: |
           set -euo pipefail
           mkdir -p "${ARTIFACTS_DIR}"
-
-          # .NET
           dotnet restore "${SOLUTION}"
           dotnet build "${SOLUTION}" -c Release --no-restore
-
-          # AppHost publish + zip solo se c'è output
           if [[ -d "${APPHOST_DIR}" ]]; then
             OUT="${ARTIFACTS_DIR}/apphost-publish"
             dotnet publish "${APPHOST_DIR}" -c Release -o "${OUT}"
@@ -198,25 +122,16 @@ jobs:
               echo "No AppHost publish output to zip."
             fi
           fi
-
-          # web-core
           if [[ -f "${WEB_DIR}/package.json" ]]; then
             npm ci --prefix "${WEB_DIR}"
             npm run build --prefix "${WEB_DIR}"
-
-            # risolve output reale (dist/* o dist/*/browser)
             DIST_ROOT="${WEB_DIR}/dist"
             if [[ -d "${DIST_ROOT}" ]]; then
-              # se esiste una sottocartella "browser", preferiscila
               CANDIDATE=$(find "${DIST_ROOT}" -type d -name browser -print -quit)
               [[ -n "${CANDIDATE}" ]] && DIST_TO_ZIP="${CANDIDATE}" || DIST_TO_ZIP="${DIST_ROOT}"
-
-              # zip verso percorso assoluto per evitare errori di directory
               OUT_ZIP="${GITHUB_WORKSPACE}/${ARTIFACTS_DIR}/web-core-dist.zip"
               mkdir -p "$(dirname "${OUT_ZIP}")"
-              (cd "${DIST_TO_ZIP}" && zip -rq "${OUT_ZIP}" .) || {
-                echo "WARN: nothing to zip in ${DIST_TO_ZIP}"
-              }
+              (cd "${DIST_TO_ZIP}" && zip -rq "${OUT_ZIP}" .) || echo "WARN: nothing to zip in ${DIST_TO_ZIP}"
             else
               echo "WARN: ${DIST_ROOT} non esiste; niente zip web-core."
             fi
@@ -234,7 +149,6 @@ jobs:
           TAG: ${{ steps.semver.outputs.tag }}
         run: |
           set -euo pipefail
-          # Tagga il commit corrente (release branch appena resettata su origin/main)
           git tag -a "${TAG}" -m "Release ${TAG}" || true
           git push origin "${TAG}"
 
@@ -250,10 +164,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Append asset links to release notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = ${{ toJSON(steps.semver.outputs.tag) }};
+            const rel = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            const assets = await github.rest.repos.listReleaseAssets({
+              owner, repo, release_id: rel.data.id, per_page: 100
+            });
+            const lines = (assets.data || []).map(a => `- [${a.name}](${a.browser_download_url})`);
+            if (!lines.length) return;
+            const section = `\n\n### Download\n${lines.join('\n')}\n`;
+            const newBody = (rel.data.body || '') + section;
+            await github.rest.repos.updateRelease({
+              owner, repo, release_id: rel.data.id, body: newBody
+            });
+
       - name: Push release branch updates (version bump commit, if any)
         env:
           REL: ${{ steps.semver.outputs.release_branch }}
         run: |
           set -euo pipefail
-          # Se abbiamo fatto un commit di bump versione, pushiamolo
           git push origin "${REL}"
