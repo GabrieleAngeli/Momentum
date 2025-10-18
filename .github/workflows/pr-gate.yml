@@ -71,7 +71,7 @@ jobs:
           files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
           flags: frontend
 
-      - name: Validate JSON ScheMAS (AJV)
+      - name: Validate JSON SCHEMAS (AJV)
         if: always()
         run: |
           npm i -g ajv-cli
@@ -144,7 +144,7 @@ jobs:
       - uses: codecov/codecov-action@v4
         with:
           files: ./test-results/coverage/**/coverage.cobertura.xml
-          flags: backend
+        flags: backend
 
   issue_linking:
     name: Issue Linking Auto Create
@@ -265,21 +265,20 @@ jobs:
             pip install -r tools/release_notes/requirements.txt
           fi
           python - <<'PY'
-          import sys, subprocess
-          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-          PY
+import sys, subprocess
+subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+PY
 
-      # --- Aggiungi .NET per gitversion (global tool) ---
+      # GitVersion (per un tag preview leggibile)
       - name: Setup .NET (for GitVersion)
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      # --- Installa GitVersion (aggiunge dotnet-gitversion al PATH) ---
       - name: Install GitVersion
         uses: GitTools/actions/gitversion/setup@v0.10.2
         with:
-          versionSpec: '5.x'        # oppure una versione specifica tipo '5.12.0'
+          versionSpec: '5.x'
 
       - name: GitVersion
         id: gv
@@ -318,58 +317,13 @@ jobs:
             --out "${OUT}"
           echo "file=${OUT}" >> "$GITHUB_OUTPUT"
 
-      - name: Commit preview file on PR branch
-        id: push_preview
-        continue-on-error: true
-        env:
-          FILE: ${{ steps.gen.outputs.file }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ github.head_ref }}
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
-        run: |
-          set -euo pipefail
-
-          # Se è un fork: non provare a pushare
-          if [ "${IS_FORK}" = "true" ]; then
-            echo "PR da fork: push disabilitato."
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Autenticazione remota con GITHUB_TOKEN
-          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
-
-          # Vai sul branch della PR
-          git switch "${BRANCH}"
-
-          # Aggiungi il file e committa se serve
-          git add "${FILE}"
-          if ! git diff --cached --quiet; then
-            if git commit -m "docs(release): add LLM preview notes for ${{ steps.preview_tag.outputs.preview_tag }}" && \
-              git push origin "HEAD:${BRANCH}"; then
-              echo "pushed=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "WARN: push fallito (permessi/branch protetta). Uso solo il commento sticky." >&2
-              echo "pushed=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          else
-            echo "Nessuna modifica da committare."
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-
-      - name: Comment preview on PR (fallback)
-        if: ${{ github.event.pull_request.head.repo.fork || steps.push_preview.outputs.pushed != 'true' }}
+      # NIENTE push sul branch PR: usiamo solo i commenti sticky
+      - name: Comment preview on PR (sticky file)
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           path: ${{ steps.gen.outputs.file }}
 
-      - name: Comment preview on PR (sticky)
+      - name: Comment preview on PR (sticky rich)
         uses: actions/github-script@v7
         with:
           script: |
