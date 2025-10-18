@@ -4,6 +4,15 @@
 - **Momentum Platform** ingests telemetry, manages identities, and broadcasts notifications.
 - External actors: Operators (web UI), sensor producers (Kafka), email/SMS providers, observability stack.
 
+```mermaid
+flowchart LR
+    Operators([Operators]) --> MomentumPlatform[[Momentum Platform]]
+    SensorProducers([Sensor Producers]) --> MomentumPlatform
+    MomentumPlatform --> EmailProviders([Email Providers])
+    MomentumPlatform --> SMSProviders([SMS Providers])
+    MomentumPlatform --> Observability([Observability Stack])
+```
+
 ## C2 – Container Diagram
 - **web-core (Angular):** shell consuming SignalR, federated Angular modules, and OpenFeature flags.
 - **web-backend-core (.NET):** API gateway + SignalR hub + OpenFeature integration. Acts as the single ingress for the frontend and exposes façade endpoints for external integrations.
@@ -13,6 +22,47 @@
 - **notifier service:** Subscribes to `telemetry.ingested`, dispatches email/SignalR and webhooks.
 - **Infrastructure:** Kafka, TimescaleDB, Ignite, Prometheus, Loki, Tempo, Grafana, Dapr sidecars, OpenTelemetry collectors.
 
+```mermaid
+flowchart LR
+    subgraph Frontend
+        WebCore[web-core (Angular)]
+    end
+    subgraph Backend
+        WebBackend[web-backend-core (.NET)]
+        ModularMonolith[modular-monolith (.NET)]
+        Identifier[identifier service]
+        Streamer[streamer service]
+        Notifier[notifier service]
+    end
+    subgraph PlatformInfrastructure[Infrastructure]
+        Kafka[(Kafka)]
+        Timescale[(TimescaleDB)]
+        Ignite[(Ignite)]
+        ObservabilityStack[[Prometheus/Loki/Tempo/Grafana]]
+        Dapr[Dapr Sidecars]
+        OTEL[OpenTelemetry Collectors]
+    end
+
+    Operators([Operators]) --> WebCore
+    WebCore --> WebBackend
+    WebBackend --> ModularMonolith
+    WebBackend --> Identifier
+    ModularMonolith --> Streamer
+    ModularMonolith --> Notifier
+    Streamer --> Kafka
+    Notifier --> Kafka
+    ModularMonolith --> Timescale
+    ModularMonolith --> Ignite
+    WebBackend --> Dapr
+    ModularMonolith --> Dapr
+    Streamer --> Dapr
+    Notifier --> Dapr
+    Kafka --> ObservabilityStack
+    Timescale --> ObservabilityStack
+    Ignite --> ObservabilityStack
+    Dapr --> OTEL
+```
+
 ## C3 – Component Diagram (web-backend-core)
 - Controllers orchestrate requests and enforce API versioning.
 - `NotificationOrchestrator` coordinates broadcasts, retries, and fan-out semantics.
@@ -21,6 +71,19 @@
 - `DaprClient` handles module invocations and pub/sub operations.
 - `FeatureFlagProvider` resolves OpenFeature toggles injected into downstream modules.
 - `OutboxProcessor` ensures at-least-once delivery for integration events.
+
+```mermaid
+flowchart TD
+    Controllers[Controllers] --> Orchestrator[NotificationOrchestrator]
+    Orchestrator --> Broadcaster[SignalRNotificationBroadcaster]
+    Orchestrator --> DaprClient[DaprClient]
+    Orchestrator --> FeatureFlags[FeatureFlagProvider]
+    Broadcaster --> NotificationHub[NotificationHub]
+    DaprClient --> Outbox[OutboxProcessor]
+    DaprClient --> Modules[Domain Modules]
+    FeatureFlags --> Modules
+    Outbox --> Integrations[Integration Events]
+```
 
 ## C4 – Code/Module View
 - Clean architecture layers per service (`Domain` → `Application` → `Infrastructure` → `Api`).
@@ -56,3 +119,23 @@
 3. Add unit/integration/contract tests and wire them to `make test`.
 4. Document the change (`docs/`, `README.md`) and add ADRs under `docs/adr/` when introducing architectural decisions.
 5. Update release notes via the automation workflow before tagging.
+
+## Event Flow Overview
+
+```mermaid
+sequenceDiagram
+    participant Sensor as Sensor Producer
+    participant Streamer as Streamer Service
+    participant Dapr as Dapr Pub/Sub
+    participant Monolith as modular-monolith
+    participant Backend as web-backend-core
+    participant Frontend as web-core
+    participant Operator as Operator
+
+    Sensor->>Streamer: Push telemetry batch
+    Streamer->>Dapr: Publish telemetry.ingested
+    Dapr->>Monolith: Deliver domain event
+    Monolith->>Backend: Invoke façade APIs / SignalR payloads
+    Backend->>Frontend: Broadcast realtime update
+    Frontend->>Operator: Surface dashboards & notifications
+```
