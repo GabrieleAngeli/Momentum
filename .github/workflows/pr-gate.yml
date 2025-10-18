@@ -320,6 +320,7 @@ jobs:
 
       - name: Commit preview file on PR branch
         id: push_preview
+        continue-on-error: true
         env:
           FILE: ${{ steps.gen.outputs.file }}
           REPO: ${{ github.repository }}
@@ -329,29 +330,38 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Se è un fork: non provare a pushare
           if [ "${IS_FORK}" = "true" ]; then
-            echo "PR da fork: push disabilitato per sicurezza." >&2
+            echo "PR da fork: push disabilitato."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Autenticazione remota con GITHUB_TOKEN
           git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
 
-          git status
-          git rev-parse --abbrev-ref HEAD
-
+          # Vai sul branch della PR
           git switch "${BRANCH}"
 
+          # Aggiungi il file e committa se serve
           git add "${FILE}"
           if ! git diff --cached --quiet; then
-            git commit -m "docs(release): add LLM preview notes for ${{ steps.preview_tag.outputs.preview_tag }}"
-            git push origin "HEAD:${BRANCH}"
-            echo "pushed=true" >> "$GITHUB_OUTPUT"
+            if git commit -m "docs(release): add LLM preview notes for ${{ steps.preview_tag.outputs.preview_tag }}" && \
+              git push origin "HEAD:${BRANCH}"; then
+              echo "pushed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "WARN: push fallito (permessi/branch protetta). Uso solo il commento sticky." >&2
+              echo "pushed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           else
             echo "Nessuna modifica da committare."
             echo "pushed=false" >> "$GITHUB_OUTPUT"
           fi
+
 
       - name: Comment preview on PR (fallback)
         if: ${{ github.event.pull_request.head.repo.fork || steps.push_preview.outputs.pushed != 'true' }}
