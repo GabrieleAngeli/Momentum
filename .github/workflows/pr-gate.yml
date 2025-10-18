@@ -251,9 +251,9 @@ jobs:
             pip install -r tools/release_notes/requirements.txt
           fi
           python - <<'PY'
-import sys, subprocess
-subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-PY
+          import sys, subprocess
+          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+          PY
 
       - name: Compute PR diff range
         id: range
@@ -307,7 +307,7 @@ PY
 
             const payload = `${header} **${tag}**
 
-${notes || '_No changes detected for this PR range._'}`;
+            ${notes || '_No changes detected for this PR range._'}`;
 
             const comments = await github.rest.issues.listComments({ owner, repo, issue_number: prNumber, per_page: 100 });
             const existing = comments.data.find(c =>
