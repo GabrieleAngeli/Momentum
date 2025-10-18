@@ -77,7 +77,8 @@ jobs:
           echo "last_tag=${LAST_TAG}"                  >> "$GITHUB_OUTPUT"
 
       - name: Create / update release branch
-        env: { REL: ${{ steps.semver.outputs.release_branch }} }
+        env: 
+          REL: ${{ steps.semver.outputs.release_branch }}
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
@@ -93,7 +94,8 @@ jobs:
           git push --force-with-lease origin "$REL"
 
       - name: Bump version in solution (best-effort)
-        env: { VERSION: ${{ steps.semver.outputs.new_version }} }
+        env: 
+          VERSION: ${{ steps.semver.outputs.new_version }}
         run: |
           set -euo pipefail
           if [[ -f Directory.Build.props ]]; then
@@ -137,7 +139,8 @@ jobs:
       # --- NOTE FINALI: usa lo stesso script Python per corpo release ---
       - name: Setup Python
         uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
+        with: 
+          python-version: "3.11"
 
       - name: Install notes deps
         run: |
