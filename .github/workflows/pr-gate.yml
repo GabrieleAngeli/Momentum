@@ -237,7 +237,10 @@ jobs:
       - name: Checkout (full history)
         uses: actions/checkout@v4
         with:
+          persist-credentials: true
           fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -289,18 +292,32 @@ jobs:
 
       - name: Commit preview file on PR branch
         if: ${{ github.event.pull_request.head.repo.fork == false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}         # org/repo
+          BRANCH: ${{ github.head_ref }}         # es. feature/xyz
+          FILE: ${{ steps.gen.outputs.file }}
         run: |
           set -euo pipefail
-          BRANCH="${{ github.head_ref }}"
-          FILE="${{ steps.gen.outputs.file }}"
+
+          # Config utente
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Garantisci che 'origin' usi il token (evita 403)
+          git remote set-url origin "https://${GITHUB_ACTOR}:${GH_TOKEN}@github.com/${REPO}.git"
+
+          # Vai sul branch della PR
           git switch "${BRANCH}"
+
+          # Aggiungi file e committa solo se ci sono cambi
           git add "${FILE}"
           if ! git diff --cached --quiet; then
             git commit -m "docs(release): add LLM preview notes for ${{ steps.range.outputs.preview_tag }}"
-            git push origin "${BRANCH}"
+            # Push esplicito HEAD -> BRANCH
+            git push origin "HEAD:${BRANCH}"
           fi
+
 
       - name: Comment preview on PR (sticky)
         uses: actions/github-script@v7
