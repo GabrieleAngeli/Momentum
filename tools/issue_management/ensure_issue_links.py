@@ -249,11 +249,11 @@ def ensure_issue_links(
             f"""
             Issue generata automaticamente per il commit {commit.sha}.
 
-            ## Sintesi
-            {summary}
+## Sintesi
+{summary}
 
-            ## Collegamenti
-            - Commit: {commit.html_url}
+## Collegamenti
+- Commit: {commit.html_url}
             """
         ).strip()
 
