@@ -29,15 +29,21 @@ jobs:
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
-        with: { dotnet-version: ${{ env.DOTNET_VERSION }} }
+        with: 
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
-        with: { node-version: ${{ env.NODE_VERSION }} }
+        with: 
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore .NET
+        run: dotnet restore ${{ env.SOLUTION }}
 
       - name: Calculate next version (SemVer from Conventional Commits)
         id: semver
