@@ -71,7 +71,7 @@ jobs:
           files: src/web-core/coverage/cobertura-coverage.xml,src/web-core/coverage/lcov.info
           flags: frontend
 
-      - name: Validate JSON ScheMAS (AJV)
+        - name: Validate JSON ScheMAS (AJV)
         if: always()
         run: |
           npm i -g ajv-cli
@@ -265,9 +265,9 @@ jobs:
             pip install -r tools/release_notes/requirements.txt
           fi
           python - <<'PY'
-import sys, subprocess
-subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-PY
+          import sys, subprocess
+          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+          PY
 
       - name: GitVersion
         id: gv
