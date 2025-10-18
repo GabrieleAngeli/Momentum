@@ -3,6 +3,9 @@ name: Release on main
 on:
   push:
     branches: [ main ]
+    # Evita retrigger quando committiamo il file delle note su main
+    paths-ignore:
+      - 'ReleaseNotes/**'
 
 permissions:
   contents: write
@@ -24,7 +27,7 @@ jobs:
       SOLUTION: Momentum.sln
       WEB_DIR: src/web-core
       APPHOST_DIR: src/AppHost
-      ARTIFACTS_DIR: artifacts  
+      ARTIFACTS_DIR: artifacts
 
     steps:
       - name: Checkout (full history)
@@ -34,12 +37,12 @@ jobs:
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
-        with: 
+        with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
-        with: 
+        with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Restore .NET
@@ -71,13 +74,13 @@ jobs:
             patch) PA=$((PA+1));;
           esac
           NEW_VERSION="${MA}.${MI}.${PA}"
-          echo "new_version=${NEW_VERSION}"            >> "$GITHUB_OUTPUT"
+          echo "new_version=${NEW_VERSION}"             >> "$GITHUB_OUTPUT"
           echo "release_branch=release/v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${NEW_VERSION}"                   >> "$GITHUB_OUTPUT"
-          echo "last_tag=${LAST_TAG}"                  >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}"                    >> "$GITHUB_OUTPUT"
+          echo "last_tag=${LAST_TAG}"                   >> "$GITHUB_OUTPUT"
 
       - name: Create / update release branch
-        env: 
+        env:
           REL: ${{ steps.semver.outputs.release_branch }}
         run: |
           set -euo pipefail
@@ -94,7 +97,7 @@ jobs:
           git push --force-with-lease origin "$REL"
 
       - name: Bump version in solution (best-effort)
-        env: 
+        env:
           VERSION: ${{ steps.semver.outputs.new_version }}
         run: |
           set -euo pipefail
@@ -136,10 +139,10 @@ jobs:
             fi
           fi
 
-      # --- NOTE FINALI: usa lo stesso script Python per corpo release ---
+      # --- NOTE FINALI: generiamo markdown e lo salviamo sia in artifacts che in repo/main ---
       - name: Setup Python
         uses: actions/setup-python@v5
-        with: 
+        with:
           python-version: "3.11"
 
       - name: Install notes deps
@@ -149,51 +152,70 @@ jobs:
             pip install -r tools/release_notes/requirements.txt
           fi
           python - <<'PY'
-          import sys, subprocess
-          subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
-          PY
+import sys, subprocess
+subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+PY
 
       - name: Generate final release notes (Markdown)
         id: relnotes
         env:
-          ENABLE_LLM: "true"                       # ⇦ ON/OFF qui
-          LLM_PROVIDER: "openai"                   # oppure "azure"
+          ENABLE_LLM: "true"
+          LLM_PROVIDER: "openai"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-          # Se Azure:
-          # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          # AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          # AZURE_OPENAI_DEPLOYMENT: "gpt-4o-mini"
-
           LLM_MODEL: "gpt-4o-mini"
           LLM_TEMPERATURE: "0.2"
         run: |
           set -euo pipefail
-          mkdir -p "${{ env.ARTIFACTS_DIR }}"
-          OUT="${{ env.ARTIFACTS_DIR }}/RELEASE_NOTES.md"
+          mkdir -p "${ARTIFACTS_DIR}" ReleaseNotes
+          OUT_ART="${ARTIFACTS_DIR}/RELEASE_NOTES.md"
+          OUT_REPO="ReleaseNotes/${{ steps.semver.outputs.tag }}.md"
+          # NOTE: calcolate sull'intervallo last_tag -> main (coerente col tag su main)
           python tools/release_notes/generate_release_notes.py \
             --base "${{ steps.semver.outputs.last_tag }}" \
-            --head "${{ steps.semver.outputs.release_branch }}" \
+            --head "main" \
             --version "${{ steps.semver.outputs.tag }}" \
-            --out "${OUT}"
-          echo "file=${OUT}" >> "$GITHUB_OUTPUT"
+            --out "${OUT_ART}"
+          cp "${OUT_ART}" "${OUT_REPO}"
+          echo "artifacts_file=${OUT_ART}" >> "$GITHUB_OUTPUT"
+          echo "repo_file=${OUT_REPO}" >> "$GITHUB_OUTPUT"
 
-      - name: Create tag
-        env: 
+      - name: Commit release notes on main
+        env:
+          FILE: ${{ steps.relnotes.outputs.repo_file }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin --prune
+          git switch main
+          git pull --ff-only origin main || true
+          git add "${FILE}"
+          if ! git diff --cached --quiet; then
+            git commit -m "docs(release): add ${FILE} [skip ci]"
+            git push origin main
+          else
+            echo "Release notes già presenti su main, nessun commit."
+          fi
+
+      # --- Tag e Release su MAIN ---
+      - name: Create tag on main
+        env:
           TAG: ${{ steps.semver.outputs.tag }}
         run: |
           set -euo pipefail
-          git tag -a "${TAG}" -m "Release ${TAG}" || true
+          git fetch origin --prune
+          MAIN_SHA="$(git rev-parse origin/main)"
+          git tag -a "${TAG}" "${MAIN_SHA}" -m "Release ${TAG}" || true
           git push origin "${TAG}"
 
-      - name: Create GitHub Release (draft)
+      - name: Create GitHub Release (draft) on main
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.semver.outputs.tag }}
-          target_commitish: ${{ steps.semver.outputs.release_branch }}
+          target_commitish: main
           draft: true
-          generate_release_notes: false          # <— disattiva auto-note
-          body_path: artifacts/RELEASE_NOTES.md  # <— usa le note generate da Python
+          generate_release_notes: false
+          body_path: ${{ steps.relnotes.outputs.artifacts_file }}
           files: |
             artifacts/*.zip
         env:
