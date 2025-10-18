@@ -76,14 +76,33 @@ jobs:
           echo "release_branch=release/v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${NEW_VERSION}"                  >> "$GITHUB_OUTPUT"
 
+      - name: Create / update release branch
+        env:
+          REL: ${{ steps.semver.outputs.release_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin --prune
+          if git rev-parse --verify "$REL" >/dev/null 2>&1; then
+            git switch "$REL"
+            git reset --hard origin/main
+          else
+            git switch -c "$REL"
+            git reset --hard origin/main
+          fi
+          git push --force-with-lease origin "$REL"
+
       - name: Generate cumulative release notes
         id: relnotes
         uses: actions/github-script@v7
+        continue-on-error: true
         with:
           script: |
             const { owner, repo } = context.repo;
             const tag = ${{ toJSON(steps.semver.outputs.tag) }};               // es. "v1.2.3"
-            const target = ${{ toJSON(steps.semver.outputs.release_branch) }}; // es. "release/v1.2.3"
+            // = ${{ toJSON(steps.semver.outputs.release_branch) }}; // es. "release/v1.2.3"
+            const target = "main";
 
             // Usa l'exec fornito dall'action (NON ridefinire 'exec')
             let lastTag = "v0.1.0";
@@ -94,11 +113,17 @@ jobs:
             core.info(`Base tag for notes: ${lastTag} -> ${target}`);
 
             // Confronta commit tra ultimo tag e HEAD della release branch
-            const cmp = await github.rest.repos.compareCommits({
-              owner, repo, base: lastTag, head: target
-            });
+            //const cmp = await github.rest.repos.compareCommits({
+            //  owner, repo, base: lastTag, head: target
+            //});
 
-            const commits = (cmp.data.commits || []).map(c => c.commit.message.split('\n')[0]);
+            let commits = [];
+            try {
+              const cmp = await github.rest.repos.compareCommits({ owner, repo, base: lastTag, head: target });
+              commits = (cmp.data.commits || []).map(...);
+            } catch (e) {
+              core.warning(`compareCommits failed: ${e.message}`);
+            }
 
             const buckets = { feat:[], fix:[], perf:[], refactor:[], docs:[], chore:[], ci:[], test:[], style:[], revert:[], other:[] };
             for (const msg of commits) {
@@ -137,25 +162,6 @@ jobs:
             if (prLines.length) body += `### Merged PRs\n${prLines.join('\n')}\n`;
 
             core.setOutput('body', body);
-
-
-
-      - name: Create / update release branch
-        env:
-          REL: ${{ steps.semver.outputs.release_branch }}
-        run: |
-          set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin --prune
-          if git rev-parse --verify "$REL" >/dev/null 2>&1; then
-            git switch "$REL"
-            git reset --hard origin/main
-          else
-            git switch -c "$REL"
-            git reset --hard origin/main
-          fi
-          git push --force-with-lease origin "$REL"
 
       - name: Bump version in solution (best-effort)
         env:
