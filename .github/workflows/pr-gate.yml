@@ -224,7 +224,7 @@ jobs:
   release_notes_preview:
     name: Release Notes Preview (LLM enriched, sticky)
     runs-on: ubuntu-latest
-    needs: [test_dotnet, issue_linking, pr_doc_autopilot ]
+    needs: [test_dotnet, issue_linking, pr_doc_autopilot]
     permissions:
       contents: read
       pull-requests: write
@@ -256,7 +256,13 @@ jobs:
           import sys, subprocess
           subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
           PY
-
+      
+      - name: GitVersion
+        id: gv
+        uses: GitTools/actions/gitversion/execute@v0.10.2
+        with:
+          useConfigFile: true     # se hai GitVersion.yml
+      
       - name: Compute PR diff range
         id: range
         shell: bash
@@ -271,8 +277,8 @@ jobs:
       - name: Generate LLM-enriched preview notes (Markdown)
         id: gen
         env:
-          ENABLE_LLM: "true"                  # oppure "false"
-          LLM_PROVIDER: "openai"              # oppure "azure"
+          ENABLE_LLM: "true" # oppure "false"
+          LLM_PROVIDER: "openai" # oppure "azure"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # Per Azure:
           # AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -289,13 +295,21 @@ jobs:
             --out "${OUT}"
           echo "file=${OUT}" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ github.token }}
+
       - name: Commit preview file on PR branch
         id: push_preview
         env:
-          FILE:   ${{ steps.gen.outputs.file }}
-          REPO:   ${{ github.repository }}                  # org/repo
-          BRANCH: ${{ github.head_ref }}                    # es. feature/test-integrazione
-          TOKEN:  ${{ github.token }}
+          FILE: ${{ steps.gen.outputs.file }}
+          REPO: ${{ github.repository }} # org/repo
+          BRANCH: ${{ github.head_ref }} # es. feature/test-integrazione
+          TOKEN: ${{ github.token }}
           IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
           set -euo pipefail
@@ -330,6 +344,11 @@ jobs:
           fi
 
 
+      - name: Comment preview on PR (fallback)
+        if: ${{ github.event.pull_request.head.repo.fork || steps.push_preview.outputs.pushed != 'true' }}
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: ${{ steps.gen.outputs.file }}
 
       - name: Comment preview on PR (sticky)
         uses: actions/github-script@v7
