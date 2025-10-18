@@ -225,7 +225,7 @@ jobs:
   release_notes_preview:
     name: Release Notes Preview (LLM enriched, sticky)
     runs-on: ubuntu-latest
-    needs: [test_dotnet, issue_linking, pr_doc_autopilot_commit_push ]
+    needs: [test_dotnet, issue_linking, pr_doc_autopilot ]
     permissions:
       contents: read
       pull-requests: write
