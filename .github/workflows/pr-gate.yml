@@ -225,7 +225,7 @@ jobs:
   release_notes_preview:
     name: Release Notes Preview (LLM enriched, sticky)
     runs-on: ubuntu-latest
-    needs: [ci, test_dotnet]
+    needs: [dotnet_tests_and_audit, issue_linking_auto_create, pr_doc_autopilot_commit_push ]
     permissions:
       contents: read
       pull-requests: write
@@ -291,32 +291,45 @@ jobs:
           echo "file=${OUT}" >> "$GITHUB_OUTPUT"
 
       - name: Commit preview file on PR branch
-        if: ${{ github.event.pull_request.head.repo.fork == false }}
+        id: push_preview
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}         # org/repo
-          BRANCH: ${{ github.head_ref }}         # es. feature/xyz
-          FILE: ${{ steps.gen.outputs.file }}
+          FILE:   ${{ steps.gen.outputs.file }}
+          REPO:   ${{ github.repository }}                  # org/repo
+          BRANCH: ${{ github.head_ref }}                    # es. feature/test-integrazione
+          TOKEN:  ${{ github.token }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
           set -euo pipefail
 
-          # Config utente
+          if [ "${IS_FORK}" = "true" ]; then
+            echo "PR da fork: push disabilitato per sicurezza." >&2
+            exit 0
+          fi
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Garantisci che 'origin' usi il token (evita 403)
-          git remote set-url origin "https://${GITHUB_ACTOR}:${GH_TOKEN}@github.com/${REPO}.git"
+          # Autenticazione remota con token
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+
+          # Sanity check: dove siamo e chi siamo
+          git status
+          git rev-parse --abbrev-ref HEAD
 
           # Vai sul branch della PR
           git switch "${BRANCH}"
 
-          # Aggiungi file e committa solo se ci sono cambi
+          # Aggiungi e committa solo se ci sono modifiche
           git add "${FILE}"
           if ! git diff --cached --quiet; then
             git commit -m "docs(release): add LLM preview notes for ${{ steps.range.outputs.preview_tag }}"
-            # Push esplicito HEAD -> BRANCH
             git push origin "HEAD:${BRANCH}"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nessuna modifica da committare."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
           fi
+
 
 
       - name: Comment preview on PR (sticky)
