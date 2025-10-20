@@ -255,11 +255,14 @@ def _enrich_with_llm(markdown_notes: str) -> str:
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
         prompt = (
-            "Sei un assistente che sintetizza release notes tecniche in italiano, in modo chiaro e conciso. "
-            "Dato il seguente testo Markdown, genera:\n"
-            "1) un paragrafo di sintesi (3-4 frasi);\n"
-            "2) una lista di 3-7 'Highlights' puntati;\n"
-            "3) lascia poi il testo originale intatto sotto la sintesi.\n\n"
+            "Sei un assistente che sintetizza release notes tecniche in inglese, in modo chiaro e conciso. "
+            "Dato il seguente testo Markdown, produci SOLO:\n"
+            "## Sintesi\n"
+            "- un paragrafo di 3-4 frasi;\n"
+            "## Highlights\n"
+            "- 3-7 punti elenco.\n\n"
+            "NON includere o ripetere il testo originale delle note: verrà aggiunto dal chiamante.\n"
+            "NON aggiungere altro oltre a queste due sezioni.\n\n"
             "Testo:\n" + markdown_notes
         )
         payload = {
@@ -278,8 +281,14 @@ def _enrich_with_llm(markdown_notes: str) -> str:
         resp.raise_for_status()
         data = resp.json()
         content = data["choices"][0]["message"]["content"].strip()
-        enriched = f"## Sintesi\n{content}\n\n---\n\n" + markdown_notes
+        # Se il modello ha (per errore) già incluso l'originale, evita di appenderlo di nuovo
+        title_line = markdown_notes.splitlines()[0] if markdown_notes else ""
+        if title_line and title_line in content:
+            enriched = content  # contiene già tutto
+        else:
+            enriched = f"{content}\n\n---\n\n{markdown_notes}"
         return _ensure_trailing_newline(enriched)
+    
     except Exception:
         # Fail-safe: mai bloccare il job
         return markdown_notes
