@@ -1,0 +1,13 @@
+# Forza LF sugli script shell
+*.sh      text eol=lf
+*.bash    text eol=lf
+*.env     text eol=lf
+.devcontainer/**.sh text eol=lf
+
+# File Windows
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+*.ps1     text eol=crlf
+
+# Resto: normalizza ma lascia decidere per lingua/tool
+*         text=auto
