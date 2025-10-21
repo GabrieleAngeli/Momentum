@@ -18,7 +18,10 @@
     "experimentalDecorators": true,
     "target": "es2022",
     "useDefineForClassFields": false,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@core/types": ["libs/core/types/index.ts"]
+    }
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,

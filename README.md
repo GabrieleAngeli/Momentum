@@ -5,7 +5,7 @@ Momentum is a modular and resilient platform that can operate as a modular monol
 
 ## Stack
 - **Backend:** .NET 8 Aspire with Dapr over gRPC and Kafka pub/sub.
-- **Frontend:** Angular 19 (standalone, i18n, module federation ready).
+- **Frontend:** Angular 19 shell with runtime module federation, shared providers (auth, flags, i18n) and a neutral UI kit.
 - **Data:** TimescaleDB for historical storage, Apache Ignite for caching.
 - **Messaging:** Kafka for telemetry events.
 - **Realtime:** SignalR and notification channels.
@@ -49,6 +49,7 @@ The repository ships a ready-to-use [Dev Container](https://containers.dev/) con
 ## Services
 | Service | Description |
 | --- | --- |
+| core-web | UI gateway exposing manifest, feature flags, menu, i18n, and auth for micro frontends |
 | identifier | Authentication and license management |
 | streamer | Telemetry ingestion from Kafka → Timescale/Ignite |
 | notifier | Multi-channel notification dispatch |

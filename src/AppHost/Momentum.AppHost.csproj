@@ -22,6 +22,7 @@
     <ProjectReference Include="..\services\notifier\Notifier.Api\Notifier.Api.csproj" />
     <ProjectReference Include="..\services\web-backend-core\WebBackendCore.Api\WebBackendCore.Api.csproj" />
     <ProjectReference Include="..\services\modular-monolith\ModularMonolith.Api\ModularMonolith.Api.csproj" />
+    <ProjectReference Include="..\services\core-web\CoreWeb.Api\CoreWeb.Api.csproj" />
 
     <Compile Include="..\shared\DevCertHostingExtensions.cs" Link="DevCertHostingExtensions.cs" />
   </ItemGroup>
