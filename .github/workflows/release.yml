@@ -14,6 +14,7 @@ on:
         options:
           - alpha
           - beta
+          - rc
           - stable
         default: alpha
 
@@ -104,7 +105,7 @@ jobs:
           set -euo pipefail
           CHANNEL="${INPUT_CHANNEL:-alpha}"
           case "${CHANNEL}" in
-            alpha|beta|stable) ;;
+            alpha|beta|rc|stable) ;;
             *) echo "Unsupported RELEASE_CHANNEL '${CHANNEL}'" >&2; exit 1;;
           esac
 
@@ -119,6 +120,7 @@ jobs:
             TAG_NAME="v${BASE_VERSION}"
             IS_PRERELEASE="false"
             IS_LATEST="true"
+            RELEASE_NAME="🚀 v${BASE_VERSION}"
           else
             if [[ -z "${BUILD}" ]]; then
               echo "Missing build identifier for prerelease channel" >&2
@@ -127,20 +129,50 @@ jobs:
             TAG_NAME="v${BASE_VERSION}-${CHANNEL}.${BUILD}"
             IS_PRERELEASE="true"
             IS_LATEST="false"
+            RELEASE_NAME="🚀 v${BASE_VERSION}-${CHANNEL}.${BUILD}"
           fi
-
-          RELEASE_NAME="🚀 v${BASE_VERSION} (${CHANNEL})"
 
           REPO="${GITHUB_REPOSITORY}" # owner/name
           OWNER="${REPO%%/*}"
           NAME="${REPO#*/}"
-          PREV_TAG="${LAST_TAG:-v0.1.0}"
+          # Determine the previous tag based on the selected channel
+          latest_tag() {
+            local pattern="$1"
+            local tags=()
+            mapfile -t tags < <(git tag --list "${pattern}" --sort=-version:refname || true)
+            for tag in "${tags[@]}"; do
+              if [[ "${tag}" != "${TAG_NAME}" ]]; then
+                echo "${tag}"
+                return 0
+              fi
+            done
+          }
+
+          PREV_TAG=""
+          case "${CHANNEL}" in
+            stable)
+              PREV_TAG="$(latest_tag 'v[0-9]*.[0-9]*.[0-9]*')"
+              ;;
+            *)
+              pattern="v*-${CHANNEL}.*"
+              PREV_TAG="$(latest_tag "${pattern}")"
+              if [[ -z "${PREV_TAG}" ]]; then
+                PREV_TAG="$(latest_tag 'v[0-9]*.[0-9]*.[0-9]*')"
+              fi
+              ;;
+          esac
+          if [[ -z "${PREV_TAG}" ]]; then
+            PREV_TAG="${LAST_TAG:-v0.1.0}"
+          fi
+
           COMPARE_URL="https://github.com/${OWNER}/${NAME}/compare/${PREV_TAG}...${TAG_NAME}"
 
           {
             echo "release_channel=${CHANNEL}"
-            echo "base_version=${BASE_VERSION}"
-            echo "build_number=${BUILD}"
+            echo "version_base=${BASE_VERSION}"
+            echo "VERSION_BASE=${BASE_VERSION}"
+            echo "build_num=${BUILD}"
+            echo "BUILD_NUM=${BUILD}"
             echo "tag_name=${TAG_NAME}"
             echo "release_name=${RELEASE_NAME}"
             echo "is_prerelease=${IS_PRERELEASE}"
@@ -237,6 +269,7 @@ jobs:
           PROJECT_NAME: Momentum
           RELEASE_NAME: ${{ steps.release_meta.outputs.release_name }}
           RELEASE_CHANNEL: ${{ steps.release_meta.outputs.release_channel }}
+          IS_PRERELEASE: ${{ steps.release_meta.outputs.is_prerelease }}
           TAG_NAME: ${{ steps.release_meta.outputs.tag_name }}
           PREV_TAG: ${{ steps.release_meta.outputs.prev_tag }}
           COMPARE_URL: ${{ steps.release_meta.outputs.compare_url }}
@@ -269,6 +302,7 @@ jobs:
           out_art = Path(os.environ["OUT_ART"])
           out_repo = Path(os.environ["OUT_REPO"])
 
+          is_prerelease = os.environ.get("IS_PRERELEASE", "false")
           commit_range = f"{prev_tag}..HEAD"
           fmt = "%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e"
           try:
@@ -338,26 +372,30 @@ jobs:
           def ensure_content(lines):
               return lines if lines else ["- _No entries recorded._"]
 
-          sections = {
-              "Highlights": ensure_content(highlights),
-              "Changes": ensure_content(changes),
-              "Fixes": ensure_content(fixes),
-              "Breaking changes": ensure_content(breaking),
-              "Changelog diff": [f"- [Compare changes]({compare_url})"],
-          }
-
           header = [
               f"# {project_name} — {release_name}",
               f"Channel: {channel}",
+              f"Prerelease: {is_prerelease}",
               f"Commit range: {prev_tag}..{tag_name}",
               "",
           ]
 
+          section_map = [
+              ("Highlights", ensure_content(highlights)),
+              ("Changes", ensure_content(changes)),
+              ("Fixes", ensure_content(fixes)),
+              ("Breaking changes", ensure_content(breaking)),
+          ]
+
           body_lines = []
-          for title, lines in sections.items():
+          for title, lines in section_map:
               body_lines.append(f"## {title}")
               body_lines.extend(lines)
               body_lines.append("")
+
+          body_lines.append("## Changelog diff")
+          body_lines.append(compare_url)
+          body_lines.append("")
 
           raw_appendix = []
           if raw_notes_path.exists():
