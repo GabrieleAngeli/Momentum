@@ -38,7 +38,8 @@ jobs:
       WEB_DIR: src/web-core
       APPHOST_DIR: src/AppHost
       ARTIFACTS_DIR: artifacts
-      RELEASE_CHANNEL: ${{ github.event.inputs.release_channel || vars.RELEASE_CHANNEL || env.RELEASE_CHANNEL || 'alpha' }}
+      RELEASE_CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.release_channel) || vars.RELEASE_CHANNEL || 'alpha' }}
+
 
     steps:
       - name: Checkout (full history)
