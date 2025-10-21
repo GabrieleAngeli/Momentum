@@ -36,6 +36,12 @@ var pubSub = builder.AddDaprPubSub("pubsub")
                     .WithMetadata("redisHost", "localhost:6379")
                     .WaitFor(redis);
 
+var coreWeb = builder.AddProject<Projects.CoreWeb_Api>("core-web-api")
+    .WithDaprSidecar()
+    .WithReference(redis)
+    .WithReference(pubSub)
+    .WithHttpEndpoint(port: 5080, targetPort: 8080, name: "http");
+
 var ignite = builder.AddContainer("ignite-momentum", "apacheignite/ignite", "2.16.0")
     .WithContainerName("ignite-momentum")
     .WithEndpoint(11211, 11211, name: "client")
@@ -89,7 +95,8 @@ var modularMonolith = builder.AddProject<Projects.ModularMonolith_Api>("modular-
 
 var angular = builder.AddExecutable("web-core", "npm", "run", "start")
     .WithWorkingDirectory("../src/web-core")
-    .WithHttpEndpoint(port: 4200, targetPort: 4200, isProxied: false);
+    .WithHttpEndpoint(port: 4200, targetPort: 4200, isProxied: false)
+    .WithReference(coreWeb);
     //.WithExternalHttpEndpoints()
     //.PublishAsDockerFile();
 

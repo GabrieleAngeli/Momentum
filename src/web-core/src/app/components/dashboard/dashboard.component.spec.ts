@@ -1,17 +1,36 @@
 import { TestBed } from '@angular/core/testing';
 import { DashboardComponent } from './dashboard.component';
-import { TelemetryService, TelemetryPayload } from '../../services/telemetry.service';
-import { of } from 'rxjs';
 import { TranslateLoader, TranslateModule } from '@ngx-translate/core';
+import { of } from 'rxjs';
+import type { UiManifestDto } from '@core/types';
+import { ManifestService } from '../../core/manifest.service';
+import { FeatureFlagService } from '../../core/feature-flag.service';
 
-class TranslateLoaderMock implements TranslateLoader {
+class FakeTranslateLoader implements TranslateLoader {
   getTranslation() {
-    return of({}); // nessuna traduzione, evita HttpClient
+    return of({});
   }
 }
 
-class TelemetryServiceMock {
-  notifications$ = of<TelemetryPayload>({ type: 'telemetry', message: 'demo' });
+class ManifestServiceStub {
+  manifestSnapshot: UiManifestDto | null = {
+    remotes: [
+      {
+        id: 'feature-a',
+        url: 'https://cdn.example/feature-a/remoteEntry.js',
+        flags: ['featureA.enabled'],
+        permissions: ['feature-a:view'],
+        semver: '^19.0.0'
+      }
+    ],
+    shared: { angular: '19.x' }
+  };
+}
+
+class FeatureFlagServiceStub {
+  getBoolean(key: string) {
+    return key === 'featureA.enabled';
+  }
 }
 
 describe('DashboardComponent', () => {
@@ -20,24 +39,27 @@ describe('DashboardComponent', () => {
       imports: [
         DashboardComponent,
         TranslateModule.forRoot({
-          loader: { provide: TranslateLoader, useClass: TranslateLoaderMock },
-        }),
+          loader: { provide: TranslateLoader, useClass: FakeTranslateLoader }
+        })
       ],
-    })
-      // Se il componente dichiara `providers: [TelemetryService]`:
-      .overrideComponent(DashboardComponent, {
-        set: { providers: [{ provide: TelemetryService, useClass: TelemetryServiceMock }] },
-      })
-      .compileComponents();
+      providers: [
+        { provide: ManifestService, useClass: ManifestServiceStub },
+        { provide: FeatureFlagService, useClass: FeatureFlagServiceStub }
+      ]
+    }).compileComponents();
   });
 
-  it('should create and hydrate notifications', () => {
+  it('renders manifest table rows', () => {
     const fixture = TestBed.createComponent(DashboardComponent);
     fixture.detectChanges();
 
     const comp = fixture.componentInstance;
-    expect(comp).toBeTruthy();
-    expect(comp.notifications().length).toBeGreaterThan(0);
-    expect(comp.notifications()[0]).toEqual({ type: 'telemetry', message: 'demo' });
+    const rows = comp.manifestRows();
+    expect(rows.length).toBe(1);
+    expect(rows[0]).toEqual({
+      id: 'feature-a',
+      url: 'https://cdn.example/feature-a/remoteEntry.js',
+      flags: 'featureA.enabled:true'
+    });
   });
 });

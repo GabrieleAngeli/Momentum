@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Momentum UI kit",
+  "type": "object",
+  "properties": {
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "props": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "required": { "type": "boolean" },
+                "default": {}
+              },
+              "required": ["name", "type", "required"]
+            }
+          },
+          "slots": { "type": "array", "items": { "type": "string" } },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "payload": { "type": "string" }
+              },
+              "required": ["name"]
+            }
+          },
+          "examples": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["name", "props", "slots", "events", "examples"]
+      }
+    }
+  },
+  "required": ["components"],
+  "components": [
+    {
+      "name": "app-ui-button",
+      "props": [
+        { "name": "variant", "type": "'primary'|'outline'|'ghost'", "required": false, "default": "primary" },
+        { "name": "size", "type": "'sm'|'md'|'lg'", "required": false, "default": "md" },
+        { "name": "disabled", "type": "boolean", "required": false, "default": false }
+      ],
+      "slots": ["default"],
+      "events": [ { "name": "clicked", "payload": "MouseEvent" } ],
+      "examples": ["<app-ui-button (clicked)=\"onClick()\">Action</app-ui-button>"]
+    },
+    {
+      "name": "app-ui-dialog",
+      "props": [
+        { "name": "open", "type": "boolean", "required": true, "default": false },
+        { "name": "title", "type": "string", "required": false, "default": "" }
+      ],
+      "slots": ["default", "dialog-actions"],
+      "events": [
+        { "name": "close", "payload": "void" },
+        { "name": "backdropClick", "payload": "void" }
+      ],
+      "examples": ["<app-ui-dialog [open]=\"open\" title=\"Info\"><p>Content</p></app-ui-dialog>"]
+    },
+    {
+      "name": "app-ui-date-picker",
+      "props": [
+        { "name": "label", "type": "string", "required": false },
+        { "name": "value", "type": "string", "required": false }
+      ],
+      "slots": [],
+      "events": [ { "name": "valueChange", "payload": "string" } ],
+      "examples": ["<app-ui-date-picker [(value)]=\"dueDate\"></app-ui-date-picker>"]
+    },
+    {
+      "name": "app-ui-input",
+      "props": [
+        { "name": "label", "type": "string", "required": false },
+        { "name": "placeholder", "type": "string", "required": false },
+        { "name": "type", "type": "string", "required": false, "default": "text" }
+      ],
+      "slots": [],
+      "events": [ { "name": "valueChange", "payload": "string" } ],
+      "examples": ["<app-ui-input label=\"Title\" [(value)]=\"title\"></app-ui-input>"]
+    },
+    {
+      "name": "app-ui-textarea",
+      "props": [
+        { "name": "label", "type": "string", "required": false },
+        { "name": "rows", "type": "number", "required": false, "default": 3 }
+      ],
+      "slots": [],
+      "events": [ { "name": "valueChange", "payload": "string" } ],
+      "examples": ["<app-ui-textarea [(value)]=\"notes\"></app-ui-textarea>"]
+    },
+    {
+      "name": "app-ui-select",
+      "props": [
+        { "name": "label", "type": "string", "required": false },
+        { "name": "options", "type": "UiSelectOption[]", "required": true }
+      ],
+      "slots": [],
+      "events": [ { "name": "valueChange", "payload": "string" } ],
+      "examples": ["<app-ui-select [options]=\"options\" [(value)]=\"selected\"></app-ui-select>"]
+    },
+    {
+      "name": "app-ui-table",
+      "props": [
+        { "name": "columns", "type": "string[]", "required": true },
+        { "name": "data", "type": "Record<string, unknown>[]", "required": true }
+      ],
+      "slots": [],
+      "events": [],
+      "examples": ["<app-ui-table [columns]=\"['name']\" [data]=\"rows\"></app-ui-table>"]
+    },
+    {
+      "name": "app-ui-toast",
+      "props": [
+        { "name": "messages", "type": "UiToastMessage[]", "required": true }
+      ],
+      "slots": [],
+      "events": [],
+      "examples": ["<app-ui-toast [messages]=\"toasts\"></app-ui-toast>"]
+    }
+  ]
+}

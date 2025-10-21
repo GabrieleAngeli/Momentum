@@ -1,36 +1,37 @@
 import { CommonModule } from '@angular/common';
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { TranslateModule } from '@ngx-translate/core';
-import { TelemetryService } from '../../services/telemetry.service';
+import { ManifestService } from '../../core/manifest.service';
+import { FeatureFlagService } from '../../core/feature-flag.service';
+import { UiTableComponent } from '../../ui/table.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, TranslateModule],
-  providers: [TelemetryService],
+  imports: [CommonModule, TranslateModule, UiTableComponent],
   template: `
-    <section>
-      <h2>{{ 'dashboard.title' | translate }}</h2>
-      <ul>
-        <li *ngFor="let notification of notifications()">
-          <strong>{{ notification.type }}</strong> → {{ notification.message }}
-        </li>
-      </ul>
+    <section class="dashboard">
+      <header>
+        <h2>{{ 'dashboard.title' | translate }}</h2>
+        <p>{{ 'dashboard.description' | translate }}</p>
+      </header>
+      <app-ui-table [columns]="['id','url','flags']" [data]="manifestRows()"></app-ui-table>
     </section>
   `
 })
 export class DashboardComponent {
-  private readonly telemetry = inject(TelemetryService);
-  readonly notifications = signal<{ type: string; message: string }[]>([]);
+  private readonly manifest = inject(ManifestService);
+  private readonly flags = inject(FeatureFlagService);
 
-  constructor() {
-    effect(() => {
-      this.telemetry.notifications$.subscribe(payload => {
-        this.notifications.update(current => [{
-          type: payload.type ?? 'telemetry',
-          message: payload.message ?? JSON.stringify(payload)
-        }, ...current].slice(0, 10));
-      });
-    });
-  }
+  readonly manifestRows = computed(() => {
+    const manifest = this.manifest.manifestSnapshot;
+    if (!manifest) {
+      return [] as Array<Record<string, unknown>>;
+    }
+    return manifest.remotes.map(remote => ({
+      id: remote.id,
+      url: remote.url,
+      flags: remote.flags.map(flag => `${flag}:${this.flags.getBoolean(flag)}`).join(', ')
+    }));
+  });
 }
