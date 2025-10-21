@@ -253,126 +253,126 @@ jobs:
             --version "${TAG_NAME}" \
             --out "${RAW_NOTES}"
           python - <<'PY'
-import os
-import re
-import subprocess
-from pathlib import Path
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
 
-project_name = os.environ.get("PROJECT_NAME", "Momentum")
-release_name = os.environ["RELEASE_NAME"]
-channel = os.environ["RELEASE_CHANNEL"]
-tag_name = os.environ["TAG_NAME"]
-prev_tag = os.environ["PREV_TAG"]
-compare_url = os.environ["COMPARE_URL"]
-raw_notes_path = Path(os.environ["RAW_NOTES"])
-out_art = Path(os.environ["OUT_ART"])
-out_repo = Path(os.environ["OUT_REPO"])
+          project_name = os.environ.get("PROJECT_NAME", "Momentum")
+          release_name = os.environ["RELEASE_NAME"]
+          channel = os.environ["RELEASE_CHANNEL"]
+          tag_name = os.environ["TAG_NAME"]
+          prev_tag = os.environ["PREV_TAG"]
+          compare_url = os.environ["COMPARE_URL"]
+          raw_notes_path = Path(os.environ["RAW_NOTES"])
+          out_art = Path(os.environ["OUT_ART"])
+          out_repo = Path(os.environ["OUT_REPO"])
 
-commit_range = f"{prev_tag}..HEAD"
-fmt = "%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e"
-try:
-    log_out = subprocess.check_output([
-        "git",
-        "log",
-        commit_range,
-        f"--pretty=format:{fmt}",
-        "--date=short",
-    ], text=True)
-except subprocess.CalledProcessError:
-    log_out = ""
+          commit_range = f"{prev_tag}..HEAD"
+          fmt = "%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e"
+          try:
+              log_out = subprocess.check_output([
+                  "git",
+                  "log",
+                  commit_range,
+                  f"--pretty=format:{fmt}",
+                  "--date=short",
+              ], text=True)
+          except subprocess.CalledProcessError:
+              log_out = ""
 
-entries = []
-if log_out:
-    for rec in log_out.split("\x1e"):
-        rec = rec.strip()
-        if not rec:
-            continue
-        parts = rec.split("\x1f")
-        if len(parts) < 5:
-            continue
-        sha, author, date, subject, body = parts[:5]
-        subject = subject.strip()
-        body = (body or "").strip()
-        entries.append({
-            "sha": sha,
-            "author": author,
-            "date": date,
-            "subject": subject,
-            "body": body,
-        })
+          entries = []
+          if log_out:
+              for rec in log_out.split("\x1e"):
+                  rec = rec.strip()
+                  if not rec:
+                      continue
+                  parts = rec.split("\x1f")
+                  if len(parts) < 5:
+                      continue
+                  sha, author, date, subject, body = parts[:5]
+                  subject = subject.strip()
+                  body = (body or "").strip()
+                  entries.append({
+                      "sha": sha,
+                      "author": author,
+                      "date": date,
+                      "subject": subject,
+                      "body": body,
+                  })
 
-conv_re = re.compile(r"^(?P<type>[a-zA-Z]+)(?:\((?P<scope>[^)]+)\))?(?P<bang>!)?:\s*(?P<msg>.+)$")
+          conv_re = re.compile(r"^(?P<type>[a-zA-Z]+)(?:\((?P<scope>[^)]+)\))?(?P<bang>!)?:\s*(?P<msg>.+)$")
 
-def classify(commit):
-    m = conv_re.match(commit["subject"])
-    ctype = m.group("type").lower() if m else "other"
-    scope = m.group("scope") if m else None
-    msg = m.group("msg") if m else commit["subject"]
-    breaking = bool(m and m.group("bang")) or "BREAKING CHANGE" in commit["body"]
-    return ctype, scope, msg.strip(), breaking
+          def classify(commit):
+              m = conv_re.match(commit["subject"])
+              ctype = m.group("type").lower() if m else "other"
+              scope = m.group("scope") if m else None
+              msg = m.group("msg") if m else commit["subject"]
+              breaking = bool(m and m.group("bang")) or "BREAKING CHANGE" in commit["body"]
+              return ctype, scope, msg.strip(), breaking
 
-def format_line(commit, scope, msg):
-    prefix = f"**{scope}**: " if scope else ""
-    return f"- {prefix}{msg} ({commit['sha'][:7]}) by {commit['author']}"
+          def format_line(commit, scope, msg):
+              prefix = f"**{scope}**: " if scope else ""
+              return f"- {prefix}{msg} ({commit['sha'][:7]}) by {commit['author']}"
 
-highlights = []
-changes = []
-fixes = []
-breaking = []
+          highlights = []
+          changes = []
+          fixes = []
+          breaking = []
 
-for commit in entries:
-    ctype, scope, msg, breaking_flag = classify(commit)
-    line = format_line(commit, scope, msg)
-    if ctype == "feat":
-        if len(highlights) < 5:
-            highlights.append(line)
-        changes.append(line)
-    elif ctype == "fix":
-        fixes.append(line)
-    else:
-        changes.append(line)
-    if breaking_flag:
-        breaking.append(line)
+          for commit in entries:
+              ctype, scope, msg, breaking_flag = classify(commit)
+              line = format_line(commit, scope, msg)
+              if ctype == "feat":
+                  if len(highlights) < 5:
+                      highlights.append(line)
+                  changes.append(line)
+              elif ctype == "fix":
+                  fixes.append(line)
+              else:
+                  changes.append(line)
+              if breaking_flag:
+                  breaking.append(line)
 
-def ensure_content(lines):
-    return lines if lines else ["- _No entries recorded._"]
+          def ensure_content(lines):
+              return lines if lines else ["- _No entries recorded._"]
 
-sections = {
-    "Highlights": ensure_content(highlights),
-    "Changes": ensure_content(changes),
-    "Fixes": ensure_content(fixes),
-    "Breaking changes": ensure_content(breaking),
-    "Changelog diff": [f"- [Compare changes]({compare_url})"],
-}
+          sections = {
+              "Highlights": ensure_content(highlights),
+              "Changes": ensure_content(changes),
+              "Fixes": ensure_content(fixes),
+              "Breaking changes": ensure_content(breaking),
+              "Changelog diff": [f"- [Compare changes]({compare_url})"],
+          }
 
-header = [
-    f"# {project_name} — {release_name}",
-    f"Channel: {channel}",
-    f"Commit range: {prev_tag}..{tag_name}",
-    "",
-]
+          header = [
+              f"# {project_name} — {release_name}",
+              f"Channel: {channel}",
+              f"Commit range: {prev_tag}..{tag_name}",
+              "",
+          ]
 
-body_lines = []
-for title, lines in sections.items():
-    body_lines.append(f"## {title}")
-    body_lines.extend(lines)
-    body_lines.append("")
+          body_lines = []
+          for title, lines in sections.items():
+              body_lines.append(f"## {title}")
+              body_lines.extend(lines)
+              body_lines.append("")
 
-raw_appendix = []
-if raw_notes_path.exists():
-    raw_text = raw_notes_path.read_text(encoding="utf-8").strip()
-    if raw_text:
-        raw_appendix.append("---")
-        raw_appendix.append("## Detailed changelog")
-        raw_appendix.append("")
-        raw_appendix.append(raw_text)
+          raw_appendix = []
+          if raw_notes_path.exists():
+              raw_text = raw_notes_path.read_text(encoding="utf-8").strip()
+              if raw_text:
+                  raw_appendix.append("---")
+                  raw_appendix.append("## Detailed changelog")
+                  raw_appendix.append("")
+                  raw_appendix.append(raw_text)
 
-final_text = "\n".join(header + body_lines + raw_appendix).rstrip() + "\n"
-out_art.write_text(final_text, encoding="utf-8")
-out_repo.write_text(final_text, encoding="utf-8")
-PY
-          echo "artifacts_file=${OUT_ART}" >> "$GITHUB_OUTPUT"
-          echo "repo_file=${OUT_REPO}" >> "$GITHUB_OUTPUT"
+          final_text = "\n".join(header + body_lines + raw_appendix).rstrip() + "\n"
+          out_art.write_text(final_text, encoding="utf-8")
+          out_repo.write_text(final_text, encoding="utf-8")
+          PY
+                    echo "artifacts_file=${OUT_ART}" >> "$GITHUB_OUTPUT"
+                    echo "repo_file=${OUT_REPO}" >> "$GITHUB_OUTPUT"
 
       - name: Commit release notes on main
         env:
