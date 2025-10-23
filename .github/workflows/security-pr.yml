@@ -24,9 +24,9 @@ permissions:
   checks: write
 
 env:
-  PREVIEW_BASE_URL: ${{ github.event.inputs.preview_url || vars.PREVIEW_BASE_URL || '' }}
-  HIGH_SEVERITY_THRESHOLD: ${{ github.event.inputs.high_severity_threshold || vars.SECURITY_HIGH_THRESHOLD || '3' }}
-  ENABLE_KUBE_HUNTER: ${{ github.event.inputs.enable_kube_hunter || vars.ENABLE_KUBE_HUNTER || 'false' }}
+  PREVIEW_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.preview_url || vars.PREVIEW_BASE_URL || '' }}
+  HIGH_SEVERITY_THRESHOLD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.high_severity_threshold || vars.SECURITY_HIGH_THRESHOLD || '3' }}
+  ENABLE_KUBE_HUNTER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_kube_hunter || vars.ENABLE_KUBE_HUNTER || 'false' }}
   REPORT_DIR: reports
 
 jobs:
