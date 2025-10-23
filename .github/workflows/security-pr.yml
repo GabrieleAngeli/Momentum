@@ -352,7 +352,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: 'stable'   # >= 1.24
 
       - name: Install Gitleaks (Go)
         env:
@@ -360,7 +360,7 @@ jobs:
         run: |
           mkdir -p "$GOBIN"
           echo "$GOBIN" >> "$GITHUB_PATH"
-          go install github.com/gitleaks/gitleaks/v8@latest
+          go install github.com/zricethezav/gitleaks/v8@latest   # 👈 path giusto
           gitleaks version
 
       - name: Gitleaks scan (CLI)
