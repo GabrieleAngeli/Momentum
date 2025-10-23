@@ -349,12 +349,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Gitleaks CLI
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Install Gitleaks (Go)
+        env:
+          GOBIN: ${{ runner.temp }}/bin
         run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_Linux_x64.tar.gz \
-            | tar -xz -C "$RUNNER_TEMP/bin"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          go install github.com/gitleaks/gitleaks/v8@latest
           gitleaks version
 
       - name: Gitleaks scan (CLI)
