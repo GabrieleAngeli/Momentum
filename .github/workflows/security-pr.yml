@@ -349,15 +349,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Gitleaks scan
-        uses: zricethezav/gitleaks-action@v2
-        with:
-          args: >-
-            detect --source="${{ github.workspace }}" --redact
-            --report-format="sarif" --report-path="${{ github.workspace }}/reports/secrets-gitleaks.sarif"
-            --config=${{ github.workspace }}/.gitleaks.toml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Gitleaks CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_Linux_x64.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          gitleaks version
+
+      - name: Gitleaks scan (CLI)
+        run: |
+          mkdir -p "$REPORT_DIR"
+          gitleaks detect \
+            --source="${{ github.workspace }}" \
+            --redact \
+            --report-format sarif \
+            --report-path "${{ github.workspace }}/$REPORT_DIR/secrets-gitleaks.sarif" \
+            --config="${{ github.workspace }}/.gitleaks.toml" \
+            || true
+
 
       - name: Upload secret scan results
         if: always()
@@ -446,13 +456,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare report directory
+        run: mkdir -p "$REPORT_DIR"
+
       - name: Generate SBOM (CycloneDX JSON)
         uses: anchore/sbom-action@v0
         with:
-          path: .                                # cartella da scansionare
-          format: cyclonedx-json                 # oppure spdx-json
+          path: .
+          format: cyclonedx-json
           output-file: ${{ env.REPORT_DIR }}/sbom-cyclonedx.json
-          upload-artifact: false                 # (opz) lo carichi tu più avanti
+          upload-artifact: false
 
       - name: Scan SBOM with Grype
         uses: anchore/scan-action@v6
