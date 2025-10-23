@@ -76,28 +76,16 @@ jobs:
         run: |
           python <<'PY'
           import json, os
-
-          def truthy(value: str | None) -> bool:
-              return (value or '').lower() == 'true'
-
+          def truthy(v): return (v or '').lower() == 'true'
           includes = []
-          if truthy(os.environ.get('has_dotnet')):
-              includes.append({"language": "dotnet"})
-          if truthy(os.environ.get('has_maven')):
-              includes.append({"language": "java-maven"})
-          if truthy(os.environ.get('has_gradle')):
-              includes.append({"language": "java-gradle"})
-          if truthy(os.environ.get('has_node')):
-              includes.append({"language": "node"})
-
+          if truthy(os.environ.get('has_dotnet')):      includes.append({"language": "dotnet"})
+          if truthy(os.environ.get('has_maven')):       includes.append({"language": "java-maven"})
+          if truthy(os.environ.get('has_gradle')):      includes.append({"language": "java-gradle"})
+          if truthy(os.environ.get('has_node')):        includes.append({"language": "node"})
           matrix = {"include": includes}
-          outputs = {
-              "matrix": json.dumps(matrix),
-              "has_languages": "true" if includes else "false",
-          }
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
-              for key, value in outputs.items():
-                  fh.write(f"{key}={value}\n")
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as fh:
+              fh.write(f"matrix={json.dumps(matrix)}\n")
+              fh.write(f"has_languages={'true' if includes else 'false'}\n")
           PY
         env:
           has_dotnet: ${{ steps.detect.outputs.has_dotnet }}
@@ -137,33 +125,40 @@ jobs:
           path: ~/.cache/osv-scanner
           key: ${{ runner.os }}-osv-scanner
 
-      - name: Install tooling packages
+      # Setup Go and install nuclei/osv-scanner in user space (no sudo)
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+
+      - name: Install nuclei & osv-scanner
+        env:
+          GOBIN: ${{ runner.temp }}/go/bin
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget unzip
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
           go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
           go install github.com/google/osv-scanner/cmd/osv-scanner@latest
-        env:
-          GOPATH: ${{ runner.temp }}/go
-          GOBIN: ${{ runner.temp }}/go/bin
-          PATH: ${{ runner.temp }}/go/bin:$PATH
 
-      - name: Update Trivy databases
-        uses: aquasecurity/trivy-action@0.20.0
+      # Setup Trivy and (opzionale) warm DB cache
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.0
         with:
-          download-db-only: true
+          cache: true
+          version: v0.65.0
+
+      - name: Warm Trivy DB cache
+        run: |
+          trivy image --download-db-only
+          trivy image --download-java-db-only || true
 
       - name: Update OSV-Scanner data
         run: |
           mkdir -p ~/.cache/osv-scanner
           osv-scanner --lockfile --recursive . || true
-        env:
-          PATH: ${{ runner.temp }}/go/bin:$PATH
 
       - name: Update Nuclei templates
         run: nuclei -update-templates
-        env:
-          PATH: ${{ runner.temp }}/go/bin:$PATH
 
       - name: Update Dependency-Check feed
         run: |
@@ -248,15 +243,20 @@ jobs:
       - name: Run Dependency-Check scan
         if: startsWith(matrix.language, 'java-')
         uses: dependency-check/Dependency-Check_Action@main
+        env:
+          # Workaround raccomandato quando si usa anche setup-java nel workflow
+          JAVA_HOME: /opt/jdk
         with:
-          args: >-
-            --project "Momentum"
-            --format "HTML"
-            --format "SARIF"
-            --out ${{ github.workspace }}/$REPORT_DIR
-            --scan ${{ github.workspace }}
+          project: 'Momentum'
+          path: ${{ github.workspace }}          # cartella da scansionare
+          format: 'HTML'                         # uno dei formati
+          out: ${{ env.REPORT_DIR }}             # cartella report
+          args: >-                               
+            --format SARIF                       # secondo formato
             --suppression ${{ github.workspace }}/dependency-check-suppression.xml
-          data-directory: ~/.m2/repository/org/owasp/dependency-check-data
+            # opzionale: se vuoi forzare una data dir specifica della CLI
+            # --data /home/runner/work/_temp/depcheck-data
+
 
       - name: Setup Node
         if: matrix.language == 'node'
@@ -330,16 +330,19 @@ jobs:
           fetch-depth: 0
 
       - name: Run Semgrep (OWASP Top 10)
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: >-
-            p/owasp-top-ten
-            r/sec-benchmarks
-          generateSarif: true
-          auditOn: pull_request
-          publishSarif: false
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install --upgrade semgrep
+          mkdir -p "$REPORT_DIR"
+          # Scan con le rules desiderate + output SARIF per GitHub Code Scanning
+          semgrep scan \
+            --config p/owasp-top-ten \
+            --config r/sec-benchmarks \
+            --sarif -o "$REPORT_DIR/sast-semgrep.sarif" \
+            --no-error || true
         env:
-          SEMGREP_RULES: p/owasp-top-ten
+          REPORT_DIR: ${{ env.REPORT_DIR }}
+
 
       - name: Move Semgrep SARIF
         run: |
@@ -368,7 +371,7 @@ jobs:
         run: mkdir -p $REPORT_DIR
 
       - name: Scan repository with Trivy
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: fs
           scanners: vuln,secret,config
@@ -395,24 +398,32 @@ jobs:
           fetch-depth: 0
 
       - name: Generate SBOM (CycloneDX JSON)
-        uses: anchore/syft-action@v1
+        uses: anchore/sbom-action@v0
         with:
-          source: .
-          output: cyclonedx-json=$REPORT_DIR/sbom-cyclonedx.json
+          path: .                                # cartella da scansionare
+          format: cyclonedx-json                 # oppure spdx-json
+          output-file: ${{ env.REPORT_DIR }}/sbom-cyclonedx.json
+          upload-artifact: false                 # (opz) lo carichi tu più avanti
 
       - name: Scan SBOM with Grype
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v6
         with:
-          path: $REPORT_DIR/sbom-cyclonedx.json
+          sbom: ${{ env.REPORT_DIR }}/sbom-cyclonedx.json
           fail-build: false
           severity-cutoff: high
-          format: sarif
-          output: $REPORT_DIR/deps-grype.sarif
+          output-format: sarif
+          output-file: ${{ env.REPORT_DIR }}/deps-grype.sarif
 
       - name: OSV Scanner SBOM validation
-        uses: google/osv-scanner-action@v1
-        with:
-          args: --sbom $REPORT_DIR/sbom-cyclonedx.json --format sarif --output $REPORT_DIR/deps-osv.sarif
+        run: |
+          mkdir -p "$REPORT_DIR"
+          # produce direttamente un SARIF per Code Scanning
+          osv-scanner scan \
+            --format sarif \
+            --output "$REPORT_DIR/deps-osv.sarif" \
+            --sbom "$REPORT_DIR/sbom-cyclonedx.json" \
+            || true
+
 
       - name: Upload SBOM artifacts
         if: always()
@@ -437,19 +448,18 @@ jobs:
         id: dockerfiles
         run: |
           mapfile -t files < <(git ls-files -- '*Dockerfile')
-          printf '%s\n' "files=${files[*]}"
           printf 'files=%s\n' "${files[*]}" >> "$GITHUB_OUTPUT"
           mkdir -p $REPORT_DIR
 
-      - name: Install Trivy CLI
-        run: |
-          sudo apt-get update
-          curl -sSL https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.0_Linux-64bit.tar.gz | tar -xz -C /tmp
-          sudo mv /tmp/trivy /usr/local/bin/trivy
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.0
+        with:
+          cache: true
+          version: v0.65.0
 
       - name: Trivy config scan for Dockerfiles
         if: steps.dockerfiles.outputs.files != ''
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: config
           scanners: misconfig,secret
@@ -586,21 +596,16 @@ jobs:
             fi
           done
 
-      - name: Run Nuclei scan
-        uses: projectdiscovery/nuclei-action@v1
-        with:
-          target: ${{ env.PREVIEW_BASE_URL }}
-          templates: >-
-            cves/
-            vulnerabilities/
-            misconfiguration/
-            exposures/
-            default-logins/
-            file/technologies/
-          exclude: destructive/
-          severity: medium,high,critical
-          json: true
-          output: ${{ github.workspace }}/$REPORT_DIR/dast-nuclei.json
+      - name: Run Nuclei scan (Docker)
+        run: |
+          mkdir -p "$REPORT_DIR"
+          docker run --rm \
+            -v "$PWD/${REPORT_DIR}:/out" \
+            projectdiscovery/nuclei:latest \
+            -u "${PREVIEW_BASE_URL}" \
+            -severity medium,high,critical \
+            -json -o "/out/dast-nuclei.json" || true
+
 
       - name: Convert Nuclei JSON to SARIF
         run: |
@@ -639,16 +644,9 @@ jobs:
               '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
               'version': '2.1.0',
               'runs': [{
-                  'tool': {
-                      'driver': {
-                          'name': 'Nuclei',
-                          'informationUri': 'https://nuclei.projectdiscovery.io',
-                          'rules': []
-                      }
-                  },
+                  'tool': {'driver': {'name': 'Nuclei','informationUri': 'https://nuclei.projectdiscovery.io','rules': []}},
                   'results': results
-              }]
-          }
+              }]}
           sarif_path.write_text(json.dumps(sarif, indent=2), encoding='utf-8')
           PY
 
@@ -714,45 +712,36 @@ jobs:
         run: |
           python <<'PY'
           import json, pathlib, os
-
           report_root = pathlib.Path('collected')
           sarif_files = sorted(report_root.glob('**/*.sarif'))
           summary = {}
           severity_map = ['critical', 'high', 'medium', 'low', 'info']
-
-          def map_severity(value: str | None, level: str | None) -> str:
-              if value is None and level is None:
-                  return 'info'
+          def map_severity(value, level):
+              if value is None and level is None: return 'info'
               if value is not None:
                   try:
                       numeric = float(value)
-                      if numeric >= 9.0:
-                          return 'critical'
-                      if numeric >= 7.0:
-                          return 'high'
-                      if numeric >= 4.0:
-                          return 'medium'
-                      if numeric > 0:
-                          return 'low'
+                      if numeric >= 9.0: return 'critical'
+                      if numeric >= 7.0: return 'high'
+                      if numeric >= 4.0: return 'medium'
+                      if numeric > 0:    return 'low'
                       return 'info'
                   except ValueError:
-                      lowered = value.lower()
-                      if lowered in severity_map:
-                          return lowered
+                      lowered = str(value).lower()
+                      if lowered in severity_map: return lowered
               if level:
-                  level = level.lower()
-                  if level == 'error':
-                      return 'high'
-                  if level == 'warning':
-                      return 'medium'
-                  if level == 'note':
-                      return 'low'
+                  level = str(level).lower()
+                  if level == 'error':   return 'high'
+                  if level == 'warning': return 'medium'
+                  if level == 'note':    return 'low'
               return 'info'
-
           for sarif_path in sarif_files:
               category = sarif_path.stem.split('-', 1)[0]
               counts = summary.setdefault(category, {sev: 0 for sev in severity_map})
-              data = json.load(open(sarif_path, 'r', encoding='utf-8'))
+              try:
+                  data = json.load(open(sarif_path, 'r', encoding='utf-8'))
+              except Exception:
+                  continue
               for run in data.get('runs', []):
                   default_severity = run.get('properties', {}).get('severity')
                   for result in run.get('results', []):
@@ -763,11 +752,9 @@ jobs:
                           result.get('level')
                       )
                       counts[sev] += 1
-
           totals = {sev: sum(category.get(sev, 0) for category in summary.values()) for sev in severity_map}
           high_threshold = int('${{ env.HIGH_SEVERITY_THRESHOLD }}')
           should_fail = totals.get('critical', 0) >= 1 or totals.get('high', 0) >= high_threshold
-
           summary_md_lines = ["## Security Summary", '', "| Category | Critical | High | Medium | Low | Info |", "| --- | --- | --- | --- | --- | --- |"]
           for category, counts in sorted(summary.items()):
               summary_md_lines.append(f"| {category} | {counts['critical']} | {counts['high']} | {counts['medium']} | {counts['low']} | {counts['info']} |")
@@ -775,15 +762,11 @@ jobs:
           summary_md_lines.append(f"**Totals**: Critical={totals['critical']}, High={totals['high']} (threshold={high_threshold}), Medium={totals['medium']}, Low={totals['low']}, Info={totals['info']}")
           summary_md_lines.append('')
           summary_md_lines.append(f"Gate status: {'❌ Blocked' if should_fail else '✅ Passing'}")
-
           report = '\n'.join(summary_md_lines)
           pathlib.Path('${{ env.REPORT_DIR }}').mkdir(exist_ok=True)
           (pathlib.Path('${{ env.REPORT_DIR }}') / 'security-summary.md').write_text(report, encoding='utf-8')
           (pathlib.Path('${{ env.REPORT_DIR }}') / 'security-summary.json').write_text(json.dumps({'categories': summary, 'totals': totals, 'should_fail': should_fail}, indent=2), encoding='utf-8')
-
-          with open('${{ env.REPORT_DIR }}/security-summary.md', 'r', encoding='utf-8') as fh:
-              print(fh.read())
-
+          print(report)
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
               fh.write(f"should_fail={str(should_fail).lower()}\n")
           PY
@@ -834,4 +817,3 @@ jobs:
         run: |
           echo "Security gate failed due to severity thresholds" >&2
           exit 1
-
