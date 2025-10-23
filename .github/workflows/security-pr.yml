@@ -3,6 +3,12 @@ name: Security PR Checks
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/**'
+      - '**/*.png'
+      - '**/*.jpg'
   workflow_dispatch:
     inputs:
       preview_url:
@@ -30,6 +36,42 @@ env:
   REPORT_DIR: reports
 
 jobs:
+
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      dotnet: ${{ steps.f.outputs.dotnet }}
+      node: ${{ steps.f.outputs.node }}
+      docker: ${{ steps.f.outputs.docker }}
+      iac: ${{ steps.f.outputs.iac }}
+      code: ${{ steps.f.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            dotnet:
+              - '**/*.sln'
+              - '**/*.csproj'
+              - '**/*.props'
+              - '**/*.cs'
+            node:
+              - '**/package.json'
+              - '**/package-lock.json'
+              - '**/*.ts'
+              - '**/*.tsx'
+            docker:
+              - '**/*Dockerfile'
+            iac:
+              - '**/*.tf'
+              - '**/*.yml'
+              - '**/*.yaml'
+              - 'ansible.cfg'
+              - 'ansible/**'
+            code:
+              - '**/*'
+
   detect:
     name: Detect technology stack
     runs-on: ubuntu-latest
@@ -180,8 +222,8 @@ jobs:
   language_scans:
     name: Language build and dependency checks
     runs-on: ubuntu-latest
-    needs: [detect]
-    if: needs.detect.outputs.has_languages == 'true'
+    needs: [detect, changed]
+    if: needs.detect.outputs.has_languages == 'true' && (needs.changed.outputs.dotnet == 'true' || needs.changed.outputs.node == 'true')
     strategy:
       matrix: ${{ fromJSON(needs.detect.outputs.repository_matrix) }}
     steps:
@@ -366,7 +408,8 @@ jobs:
   trivy_fs_scan:
     name: Application filesystem scan
     runs-on: ubuntu-latest
-    needs: [detect]
+    needs: [detect, changed]
+    if: needs.changed.outputs.code == 'true'   # o restringi a src/**
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -442,8 +485,8 @@ jobs:
   container_scan:
     name: Container security
     runs-on: ubuntu-latest
-    needs: [detect]
-    if: needs.detect.outputs.has_docker == 'true'
+    needs: [detect, changed]
+    if: needs.detect.outputs.has_docker == 'true' && needs.changed.outputs.docker == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -514,11 +557,11 @@ jobs:
   iac_scan:
     name: IaC and Kubernetes security
     runs-on: ubuntu-latest
-    needs: [detect]
+    needs: [detect, changed]
     if: >-
-      needs.detect.outputs.has_kubernetes == 'true' ||
+      (needs.detect.outputs.has_kubernetes == 'true' ||
       needs.detect.outputs.has_terraform == 'true' ||
-      needs.detect.outputs.has_ansible == 'true'
+      needs.detect.outputs.has_ansible == 'true' ) && needs.changed.outputs.iac == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
