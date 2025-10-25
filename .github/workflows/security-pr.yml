@@ -276,8 +276,10 @@ jobs:
         run: |
           mkdir -p "$GOBIN"
           echo "$GOBIN" >> "$GITHUB_PATH"
-          go install github.com/zricethezav/gitleaks/v8@latest   # 👈 path giusto
-          gitleaks version
+          go install github.com/zricethezav/gitleaks/v8@latest   # path corretto
+
+      - name: Gitleaks version
+        run: gitleaks version
 
       - name: Gitleaks scan (CLI)
         run: |
