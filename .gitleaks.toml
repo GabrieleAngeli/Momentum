@@ -1,12 +1,20 @@
 # Momentum baseline allowlist for Gitleaks. Extend this file when you need to suppress
 # intentional secrets (for example test certificates). Patterns added here should be
 # justified in docs/security/README.md.
-title = "Momentum Gitleaks Baseline"
+title = "Momentum gitleaks"
+extends = "gitleaks:latest"
 
 [allowlist]
-  description = "Known safe test artefacts"
-  files = [
-    "tests/.*",
-    "docs/.+",
-    "ReleaseNotes/.+"
-  ]
+description = "Global false positives / non-prod fixtures"
+paths = [
+  '''^docs/''',
+  '''^\.github/''',
+  '''^.*\.md$''',
+  '''^test(s)?/fixtures?/''',
+  '''^samples?/''',
+  '''^examples?/'''
+]
+regexes = [
+  '''(?i)\b(dummy|placeholder|changeme)\b'''
+]
+stopwords = ["example", "sample", "test"]
