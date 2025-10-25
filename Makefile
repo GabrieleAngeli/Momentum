@@ -1,4 +1,4 @@
-.PHONY: dev build backend frontend contracts test lint
+.PHONY: dev build backend frontend contracts test lint security
 
 dev: build
 	docker compose up --build
@@ -22,5 +22,8 @@ e2e:
 	npx playwright test
 
 test:
-	dotnet test Momentum.sln || true
-	npm test --prefix src/web-core || true
+        dotnet test Momentum.sln || true
+        npm test --prefix src/web-core || true
+
+security:
+        tools/security/run-all.sh

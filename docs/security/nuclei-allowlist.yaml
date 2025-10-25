@@ -1,0 +1,7 @@
+# List Nuclei templates to skip for specific hosts.
+# Example:
+# hosts:
+#   - domain: preview.example.com
+#     exclude:
+#       - cves/2021/CVE-2021-9999.yaml
+hosts: []

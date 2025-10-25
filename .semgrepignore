@@ -1,0 +1,8 @@
+# Directories that should be excluded from Semgrep scans.
+# Add generated code or third-party vendored dependencies here with justification.
+node_modules/
+**/bin/
+**/obj/
+**/dist/
+**/coverage/
+ReleaseNotes/

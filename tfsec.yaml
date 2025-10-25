@@ -1,0 +1,6 @@
+# Global configuration for tfsec. Use overrides sparingly and document changes in docs/security/README.md.
+exclude:
+  - aws-s3-encryption-customer-key
+severity_overrides:
+  critical:
+    - aws-cloudtrail-enable-at-rest-encryption

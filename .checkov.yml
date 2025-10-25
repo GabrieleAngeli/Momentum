@@ -1,0 +1,5 @@
+skip-check:
+  - CKV_SECRET_6  # Covered by Gitleaks
+  - CKV_DOCKER_2  # Duplicated by Trivy config scan
+output: cli
+soft-fail: false
