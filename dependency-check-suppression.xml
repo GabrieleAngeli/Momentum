@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions>
+    <!-- Document each suppression with a rationale and link to the tracking issue. -->
+    <!-- Example:
+    <suppress>
+        <notes><![CDATA[False positive for test fixture library. See ISSUE-123.]]></notes>
+        <packageUrl regex="true">pkg:maven/com.example/test-fixture@.*</packageUrl>
+    </suppress>
+    -->
+</suppressions>
