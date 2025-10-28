@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+option csharp_namespace = "Identifier.Rpc.V1";
+
+package identifier.rpc.v1;
+
+import "google/protobuf/wrappers.proto";
+
+service IdentifierService {
+  rpc Authorize (AuthorizeRequest) returns (AuthorizeResponse);
+  rpc EvaluateFlag (EvaluateFlagRequest) returns (EvaluateFlagResponse);
+  rpc CheckLicense (CheckLicenseRequest) returns (CheckLicenseResponse);
+  rpc Seed (SeedRequest) returns (SeedResponse);
+}
+
+message AuthorizeRequest {
+  string user_id = 1;
+  string resource = 2;
+  string action = 3;
+}
+
+message AuthorizeResponse {
+  bool allowed = 1;
+  string reason = 2;
+}
+
+message EvaluateFlagRequest {
+  string flag_key = 1;
+  string organization_id = 2;
+  string user_id = 3;
+  repeated string group_ids = 4;
+}
+
+message EvaluateFlagResponse {
+  string flag_key = 1;
+  string variation = 2;
+  bool enabled = 3;
+}
+
+message CheckLicenseRequest {
+  string organization_id = 1;
+  string feature_key = 2;
+}
+
+message CheckLicenseResponse {
+  string organization_id = 1;
+  string feature_key = 2;
+  bool has_license = 3;
+  bool feature_included = 4;
+  bool within_quota = 5;
+  string reason = 6;
+  google.protobuf.Int32Value remaining_quota = 7;
+}
+
+message SeedRequest {
+  bool force = 1;
+}
+
+message SeedResponse {
+  bool seeded = 1;
+}

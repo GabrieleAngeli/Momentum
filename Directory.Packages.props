@@ -76,6 +76,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageVersion>
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.3" />
 
 
     <PackageVersion Include="Microsoft.Extensions.AI" Version="$(MEAIVersion)" />
@@ -89,6 +90,7 @@
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="$(DotNetExtensionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(DotNetExtensionsVersion)" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageVersion Include="DotNet.Testcontainers" Version="3.7.0" />
 
     <!-- OpenTelemetry -->
     <PackageVersion Include="OpenTelemetry" Version="$(OpenTelemetryVersion)" />
