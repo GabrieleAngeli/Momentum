@@ -3,7 +3,7 @@
 [![Security Checks](../../actions/workflows/security-pr.yml/badge.svg?branch=main)](../../actions/workflows/security-pr.yml)
 
 ## Overview
-Momentum is a modular and resilient platform that can operate as a modular monolith or evolve into a microservice topology without changing public contracts. The `modular-monolith` service provides the reference implementation for the aggregated runtime, and developers should follow the dedicated [Modular Architecture Guidelines](docs/06-Modular-Architecture-Guidelines.md) when extending it. Additional architectural context is available in the [architecture overview](architecture-overview.md).
+Momentum is a modular and resilient IoT platform that can operate as a modular monolith or evolve into a microservice topology without changing public contracts. The `modular-monolith` service provides the reference implementation for the aggregated runtime, and developers should follow the dedicated [Modular Architecture Guidelines](docs/06-Modular-Architecture-Guidelines.md) when extending it. Additional architectural context is available in the [architecture overview](architecture-overview.md).
 
 ## Stack
 - **Backend:** .NET 8 Aspire with Dapr over gRPC and Kafka pub/sub.
