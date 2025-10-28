@@ -16,7 +16,7 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
 #pragma warning disable 612, 618
         modelBuilder
             .HasAnnotation("ProductVersion", "8.0.4")
-            .HasAnnotation("Relational:MaxIdentifierLength", 128);
+            .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
         modelBuilder.Entity("Identifier.Domain.Entities.Entitlement", b =>
         {

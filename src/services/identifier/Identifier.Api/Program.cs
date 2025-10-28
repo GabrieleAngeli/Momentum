@@ -1,3 +1,6 @@
+using Dapr;
+using Identifier.Api.Grpc;
+using Identifier.Api.Seed;
 using System.Linq;
 using Identifier.Api.Services;
 using Identifier.Application;
@@ -12,6 +15,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using System.Linq;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,7 +34,10 @@ services.AddDbContext<IdentifierDbContext>(options =>
     var connectionString = configuration.GetConnectionString("Identifier");
     if (!string.IsNullOrWhiteSpace(connectionString))
     {
-        options.UseSqlServer(connectionString);
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure();
+        });
     }
     else
     {
@@ -42,6 +52,9 @@ services.AddScoped<ILicenseService, LicenseService>();
 services.AddScoped<IAuthorizationEngine, AuthorizationEngine>();
 services.AddScoped<IdentifierSeeder>();
 
+services.AddDaprClient();
+services.AddGrpc();
+
 services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 services.AddAuthorization();
 services.AddEndpointsApiExplorer();
@@ -54,6 +67,21 @@ services.AddSwaggerGen(c =>
         Description = "RBAC, licensing and feature flag service for Momentum"
     });
 });
+
+services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("identifier-api"))
+    .WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation();
+        metrics.AddRuntimeInstrumentation();
+        metrics.AddMeter("Identifier.Infrastructure");
+        metrics.AddPrometheusExporter();
+    })
+    .WithTracing(tracing =>
+    {
+        tracing.AddAspNetCoreInstrumentation();
+        tracing.AddHttpClientInstrumentation();
+    });
 
 services.AddHealthChecks();
 
@@ -69,6 +97,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHealthChecks("/healthz");
+app.MapGrpcService<IdentifierGrpcService>();
+app.MapPrometheusScrapingEndpoint("/metrics");
 
 app.MapGet("/api/identifier/authorize", async (
     [FromQuery] Guid userId,
@@ -169,6 +199,58 @@ app.MapPost("/api/identifier/seed", async (
     IConfiguration config,
     CancellationToken cancellationToken) =>
 {
+    return await ExecuteSeedAsync(seeder, config, force: false, cancellationToken);
+    {
+        return Results.NotFound();
+    }
+
+    var evaluation = await featureFlagProvider.EvaluateAsync(
+        flagId,
+        orgId,
+        userId,
+        groupIds ?? Array.Empty<Guid>(),
+        cancellationToken);
+
+    var enabled = await featureFlagProvider.IsEnabledAsync(flagKey, orgId, userId, groupIds ?? Array.Empty<Guid>(), cancellationToken);
+    return Results.Json(new { flagKey, variation = evaluation, enabled });
+})
+.WithName("EvaluateFlag")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Evaluates a feature flag considering org/group/user overrides";
+    return operation;
+});
+
+app.MapGet("/api/identifier/license/has-feature/{featureKey}", async (
+    string featureKey,
+    [FromQuery] Guid orgId,
+    ILicenseService licenseService,
+    CancellationToken cancellationToken) =>
+{
+    var evaluation = await licenseService.EvaluateAsync(orgId, featureKey, cancellationToken);
+    return Results.Json(new
+    {
+        organizationId = orgId,
+        featureKey,
+        hasLicense = evaluation.HasLicense,
+        included = evaluation.FeatureIncluded,
+        withinQuota = evaluation.WithinQuota,
+        evaluation.Reason,
+        evaluation.RemainingQuota
+    });
+})
+.WithName("HasFeature")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Checks whether an organization can access a feature";
+    return operation;
+});
+
+app.MapPost("/api/identifier/seed", async (
+    IdentifierSeeder seeder,
+    IConfiguration config,
+    CancellationToken cancellationToken) =>
+{
     var enabled = config.GetValue<bool?>("Identifier:Seed:Enabled") ??
                   string.Equals(Environment.GetEnvironmentVariable("IDENTIFIER__SEED_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
     if (!enabled)
@@ -185,6 +267,15 @@ app.MapPost("/api/identifier/seed", async (
     operation.Summary = "Seeds baseline data. Protected by configuration flag.";
     return operation;
 });
+
+app.MapPost("/identifier/events/seed", [Topic("identifier", "seed")] async (
+    IdentifierSeeder seeder,
+    IConfiguration config,
+    CancellationToken cancellationToken) =>
+{
+    return await ExecuteSeedAsync(seeder, config, force: false, cancellationToken);
+})
+.WithName("SeedTopic");
 
 app.MapGet("/api/identifier/flags/{flagKey}", async (
     string flagKey,
@@ -203,6 +294,21 @@ app.MapGet("/api/identifier/flags/{flagKey}", async (
 })
 .WithName("FlagStatus");
 
+app.MapSubscribeHandler();
+app.MapGet("/", () => Results.Ok(new { service = "identifier", status = "ready" }));
+
+app.Run();
+
+static async Task<IResult> ExecuteSeedAsync(IdentifierSeeder seeder, IConfiguration config, bool force, CancellationToken cancellationToken)
+{
+    if (!force && !SeedExecution.IsSeedEnabled(config))
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
+    await seeder.SeedAsync(cancellationToken);
+    return Results.Ok(new { status = "seeded" });
+}
 app.MapGet("/", () => Results.Ok(new { service = "identifier", status = "ready" }));
 
 app.Run();

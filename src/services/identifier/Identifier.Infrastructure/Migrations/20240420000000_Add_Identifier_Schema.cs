@@ -13,6 +13,9 @@ public partial class Add_Identifier_Schema : Migration
             name: "FeatureFlags",
             columns: table => new
             {
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                Key = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                DefaultVariation = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                 Key = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
                 DefaultVariation = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false)
@@ -50,8 +53,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "Organizations",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Name = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                Name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false)
             },
             constraints: table =>
             {
@@ -62,10 +65,10 @@ public partial class Add_Identifier_Schema : Migration
             name: "Permissions",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Code = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                Resource = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
-                Action = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                Code = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                Resource = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                Action = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {
@@ -76,8 +79,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "Roles",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {
@@ -88,11 +91,11 @@ public partial class Add_Identifier_Schema : Migration
             name: "Licenses",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                ValidFrom = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                ValidTo = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                Tier = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                ValidFrom = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                ValidTo = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                Tier = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
             },
             constraints: table =>
             {
@@ -109,9 +112,9 @@ public partial class Add_Identifier_Schema : Migration
             name: "Groups",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Name = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                Name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {
@@ -128,10 +131,10 @@ public partial class Add_Identifier_Schema : Migration
             name: "Users",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
-                Active = table.Column<bool>(type: "bit", nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                Active = table.Column<bool>(type: "boolean", nullable: false)
             },
             constraints: table =>
             {
@@ -148,8 +151,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "ModuleFeatures",
             columns: table => new
             {
-                ModuleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                FeatureId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                ModuleId = table.Column<Guid>(type: "uuid", nullable: false),
+                FeatureId = table.Column<Guid>(type: "uuid", nullable: false)
             },
             constraints: table =>
             {
@@ -172,11 +175,11 @@ public partial class Add_Identifier_Schema : Migration
             name: "Entitlements",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                LicenseId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                FeatureId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Quota = table.Column<int>(type: "int", nullable: true),
-                ConstraintsJson = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                LicenseId = table.Column<Guid>(type: "uuid", nullable: false),
+                FeatureId = table.Column<Guid>(type: "uuid", nullable: false),
+                Quota = table.Column<int>(type: "integer", nullable: true),
+                ConstraintsJson = table.Column<string>(type: "text", nullable: true)
             },
             constraints: table =>
             {
@@ -199,8 +202,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "LicenseModules",
             columns: table => new
             {
-                LicenseId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                ModuleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                LicenseId = table.Column<Guid>(type: "uuid", nullable: false),
+                ModuleId = table.Column<Guid>(type: "uuid", nullable: false)
             },
             constraints: table =>
             {
@@ -223,10 +226,10 @@ public partial class Add_Identifier_Schema : Migration
             name: "GroupFlags",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                GroupId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                FeatureFlagId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Variation = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                GroupId = table.Column<Guid>(type: "uuid", nullable: false),
+                FeatureFlagId = table.Column<Guid>(type: "uuid", nullable: false),
+                Variation = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
             },
             constraints: table =>
             {
@@ -249,8 +252,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "GroupRoles",
             columns: table => new
             {
-                GroupId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                RoleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                GroupId = table.Column<Guid>(type: "uuid", nullable: false),
+                RoleId = table.Column<Guid>(type: "uuid", nullable: false)
             },
             constraints: table =>
             {
@@ -273,11 +276,11 @@ public partial class Add_Identifier_Schema : Migration
             name: "OrgFlags",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                FeatureFlagId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Variation = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                RuleJson = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                FeatureFlagId = table.Column<Guid>(type: "uuid", nullable: false),
+                Variation = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                RuleJson = table.Column<string>(type: "text", nullable: true)
             },
             constraints: table =>
             {
@@ -300,8 +303,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "RolePermissions",
             columns: table => new
             {
-                RoleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                PermissionId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                RoleId = table.Column<Guid>(type: "uuid", nullable: false),
+                PermissionId = table.Column<Guid>(type: "uuid", nullable: false)
             },
             constraints: table =>
             {
@@ -324,10 +327,10 @@ public partial class Add_Identifier_Schema : Migration
             name: "UserFlags",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                FeatureFlagId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Variation = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                FeatureFlagId = table.Column<Guid>(type: "uuid", nullable: false),
+                Variation = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
             },
             constraints: table =>
             {
@@ -350,8 +353,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "UserGroups",
             columns: table => new
             {
-                UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                GroupId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                GroupId = table.Column<Guid>(type: "uuid", nullable: false)
             },
             constraints: table =>
             {
