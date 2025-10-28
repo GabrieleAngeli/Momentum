@@ -1,6 +1,7 @@
 using Dapr;
 using Identifier.Api.Grpc;
 using Identifier.Api.Seed;
+using System.Linq;
 using Identifier.Api.Services;
 using Identifier.Application;
 using Identifier.Application.Abstractions;
@@ -199,6 +200,66 @@ app.MapPost("/api/identifier/seed", async (
     CancellationToken cancellationToken) =>
 {
     return await ExecuteSeedAsync(seeder, config, force: false, cancellationToken);
+    {
+        return Results.NotFound();
+    }
+
+    var evaluation = await featureFlagProvider.EvaluateAsync(
+        flagId,
+        orgId,
+        userId,
+        groupIds ?? Array.Empty<Guid>(),
+        cancellationToken);
+
+    var enabled = await featureFlagProvider.IsEnabledAsync(flagKey, orgId, userId, groupIds ?? Array.Empty<Guid>(), cancellationToken);
+    return Results.Json(new { flagKey, variation = evaluation, enabled });
+})
+.WithName("EvaluateFlag")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Evaluates a feature flag considering org/group/user overrides";
+    return operation;
+});
+
+app.MapGet("/api/identifier/license/has-feature/{featureKey}", async (
+    string featureKey,
+    [FromQuery] Guid orgId,
+    ILicenseService licenseService,
+    CancellationToken cancellationToken) =>
+{
+    var evaluation = await licenseService.EvaluateAsync(orgId, featureKey, cancellationToken);
+    return Results.Json(new
+    {
+        organizationId = orgId,
+        featureKey,
+        hasLicense = evaluation.HasLicense,
+        included = evaluation.FeatureIncluded,
+        withinQuota = evaluation.WithinQuota,
+        evaluation.Reason,
+        evaluation.RemainingQuota
+    });
+})
+.WithName("HasFeature")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Checks whether an organization can access a feature";
+    return operation;
+});
+
+app.MapPost("/api/identifier/seed", async (
+    IdentifierSeeder seeder,
+    IConfiguration config,
+    CancellationToken cancellationToken) =>
+{
+    var enabled = config.GetValue<bool?>("Identifier:Seed:Enabled") ??
+                  string.Equals(Environment.GetEnvironmentVariable("IDENTIFIER__SEED_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+    if (!enabled)
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
+    await seeder.SeedAsync(cancellationToken);
+    return Results.Ok(new { status = "seeded" });
 })
 .WithName("Seed")
 .WithOpenApi(operation =>
@@ -248,5 +309,8 @@ static async Task<IResult> ExecuteSeedAsync(IdentifierSeeder seeder, IConfigurat
     await seeder.SeedAsync(cancellationToken);
     return Results.Ok(new { status = "seeded" });
 }
+app.MapGet("/", () => Results.Ok(new { service = "identifier", status = "ready" }));
+
+app.Run();
 
 public partial class Program;

@@ -22,19 +22,19 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("ConstraintsJson")
-                .HasColumnType("text");
+                .HasColumnType("nvarchar(max)");
 
             b.Property<Guid>("FeatureId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("LicenseId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<int?>("Quota")
-                .HasColumnType("integer");
+                .HasColumnType("int");
 
             b.HasKey("Id");
 
@@ -49,12 +49,12 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Key")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.HasKey("Id");
 
@@ -68,17 +68,17 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("DefaultVariation")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("character varying(64)");
+                .HasColumnType("nvarchar(64)");
 
             b.Property<string>("Key")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.HasKey("Id");
 
@@ -92,15 +92,15 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Name")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.Property<Guid>("OrganizationId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.HasKey("Id");
 
@@ -113,18 +113,18 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("FeatureFlagId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("GroupId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Variation")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("character varying(64)");
+                .HasColumnType("nvarchar(64)");
 
             b.HasKey("Id");
 
@@ -139,10 +139,10 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("Identifier.Domain.Entities.GroupRole", b =>
         {
             b.Property<Guid>("GroupId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("RoleId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.HasKey("GroupId", "RoleId");
 
@@ -155,21 +155,21 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("OrganizationId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Tier")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("character varying(64)");
+                .HasColumnType("nvarchar(64)");
 
             b.Property<DateTimeOffset>("ValidFrom")
-                .HasColumnType("timestamp with time zone");
+                .HasColumnType("datetimeoffset");
 
             b.Property<DateTimeOffset>("ValidTo")
-                .HasColumnType("timestamp with time zone");
+                .HasColumnType("datetimeoffset");
 
             b.HasKey("Id");
 
@@ -181,10 +181,10 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("Identifier.Domain.Entities.LicenseModule", b =>
         {
             b.Property<Guid>("LicenseId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("ModuleId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.HasKey("LicenseId", "ModuleId");
 
@@ -197,12 +197,12 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Key")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.HasKey("Id");
 
@@ -215,10 +215,10 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("Identifier.Domain.Entities.ModuleFeature", b =>
         {
             b.Property<Guid>("ModuleId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("FeatureId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.HasKey("ModuleId", "FeatureId");
 
@@ -231,21 +231,21 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("FeatureFlagId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("OrganizationId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("RuleJson")
-                .HasColumnType("text");
+                .HasColumnType("nvarchar(max)");
 
             b.Property<string>("Variation")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("character varying(64)");
+                .HasColumnType("nvarchar(64)");
 
             b.HasKey("Id");
 
@@ -261,12 +261,12 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Name")
                 .IsRequired()
                 .HasMaxLength(256)
-                .HasColumnType("character varying(256)");
+                .HasColumnType("nvarchar(256)");
 
             b.HasKey("Id");
 
@@ -277,22 +277,22 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Action")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.Property<string>("Code")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.Property<string>("Resource")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.HasKey("Id");
 
@@ -306,12 +306,12 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Name")
                 .IsRequired()
                 .HasMaxLength(128)
-                .HasColumnType("character varying(128)");
+                .HasColumnType("nvarchar(128)");
 
             b.HasKey("Id");
 
@@ -321,10 +321,10 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("Identifier.Domain.Entities.RolePermission", b =>
         {
             b.Property<Guid>("RoleId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("PermissionId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.HasKey("RoleId", "PermissionId");
 
@@ -337,18 +337,18 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<bool>("Active")
-                .HasColumnType("boolean");
+                .HasColumnType("bit");
 
             b.Property<string>("Email")
                 .IsRequired()
                 .HasMaxLength(256)
-                .HasColumnType("character varying(256)");
+                .HasColumnType("nvarchar(256)");
 
             b.Property<Guid>("OrganizationId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.HasKey("Id");
 
@@ -364,18 +364,18 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         {
             b.Property<Guid>("Id")
                 .ValueGeneratedOnAdd()
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("FeatureFlagId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("UserId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<string>("Variation")
                 .IsRequired()
                 .HasMaxLength(64)
-                .HasColumnType("character varying(64)");
+                .HasColumnType("nvarchar(64)");
 
             b.HasKey("Id");
 
@@ -390,10 +390,10 @@ partial class IdentifierDbContextModelSnapshot : ModelSnapshot
         modelBuilder.Entity("Identifier.Domain.Entities.UserGroup", b =>
         {
             b.Property<Guid>("UserId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.Property<Guid>("GroupId")
-                .HasColumnType("uuid");
+                .HasColumnType("uniqueidentifier");
 
             b.HasKey("UserId", "GroupId");
 

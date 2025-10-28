@@ -9,20 +9,12 @@ src/services/identifier/
  ├─ Identifier.Domain/            // Entities shared across the bounded context
  ├─ Identifier.Application/       // Contracts, options, cache abstractions
  ├─ Identifier.Infrastructure/    // EF Core DbContext, services, migrations, seed
- └─ Identifier.Api/               // HTTP, gRPC and Dapr hosting (authZ, licensing, flag endpoints)
+ └─ Identifier.Api/               // Minimal Web API (authZ, licensing, flag endpoints)
 
 tests/Identifier/
  ├─ Identifier.Application.Tests/     // Unit tests for engines/providers/services
  └─ Identifier.Api.IntegrationTests/  // WebApplicationFactory based integration tests
 ```
-
-## Communication surfaces
-
-| Channel | Definition | Description |
-|---------|------------|-------------|
-| HTTP API | `/api/identifier/*` | REST endpoints for authorization decisions, flag evaluation and licensing checks. |
-| gRPC | `contracts/identifier/identifier.proto` → `IdentifierService` | Low-latency RPC surface exposing Authorize, EvaluateFlag, CheckLicense and Seed operations. |
-| Dapr | Topic `identifier:seed` | Pub/Sub trigger that replays the seeding pipeline when the `Identifier:Seed:Enabled` feature is active. |
 
 ## Domain model
 
@@ -212,7 +204,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run
 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 dotnet test Momentum.sln --filter Identifier
 ```
 
-Integration tests run against a TimescaleDB (PostgreSQL) instance provisioned via Testcontainers to match production semantics. Unit tests rely on EF Core InMemory providers for deterministic behaviour.
+Integration tests use SQLite in-memory with automatic database creation. Unit tests rely on EF Core InMemory providers for deterministic behaviour.
 
 ## Seed data
 
@@ -229,7 +221,6 @@ Seeds are idempotent and can be executed via the protected `/api/identifier/seed
 ## Observability & caching
 
 - Health check at `/healthz`.
-- OpenTelemetry metrics & traces (`identifier-api` resource) with ASP.NET Core, HTTP client, and runtime instrumentation. Metrics exposed via Prometheus scrape endpoint `/metrics`.
 - Swagger UI in Development environment.
 - Feature flag metadata cached through `MemoryIdentifierCache`. Replace by registering an alternative `IIdentifierCache` implementation (e.g. Redis-backed).
 
