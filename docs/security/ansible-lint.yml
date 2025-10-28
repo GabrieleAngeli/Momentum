@@ -1,0 +1,7 @@
+skip_list:
+  - experimental
+warn_list:
+  - fqcn-builtins
+  - no-log-password
+profiles:
+  - production

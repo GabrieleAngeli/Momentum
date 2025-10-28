@@ -1,0 +1,804 @@
+name: Security PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/**'
+      - '**/*.png'
+      - '**/*.jpg'
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: "Base URL of the preview environment (https://example.com)"
+        required: false
+      high_severity_threshold:
+        description: "Number of High findings allowed before gating fails"
+        required: false
+        default: "3"
+      enable_kube_hunter:
+        description: "Run kube-hunter on the preview cluster"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+  checks: write
+
+env:
+  PREVIEW_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.preview_url || vars.PREVIEW_BASE_URL || '' }}
+  HIGH_SEVERITY_THRESHOLD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.high_severity_threshold || vars.SECURITY_HIGH_THRESHOLD || '3' }}
+  ENABLE_KUBE_HUNTER: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_kube_hunter || vars.ENABLE_KUBE_HUNTER || 'false' }}
+  REPORT_DIR: reports
+
+jobs:
+
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      dotnet: ${{ steps.f.outputs.dotnet }}
+      node: ${{ steps.f.outputs.node }}
+      docker: ${{ steps.f.outputs.docker }}
+      iac: ${{ steps.f.outputs.iac }}
+      code: ${{ steps.f.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            dotnet:
+              - '**/*.sln'
+              - '**/*.csproj'
+              - '**/*.props'
+              - '**/*.cs'
+            node:
+              - '**/package.json'
+              - '**/package-lock.json'
+              - '**/*.ts'
+              - '**/*.tsx'
+            docker:
+              - '**/*Dockerfile'
+            iac:
+              - '**/*.tf'
+              - '**/*.yml'
+              - '**/*.yaml'
+              - 'ansible.cfg'
+              - 'ansible/**'
+            code:
+              - '**/*'
+
+  detect:
+    name: Detect technology stack
+    runs-on: ubuntu-latest
+    outputs:
+      has_dotnet: ${{ steps.detect.outputs.has_dotnet }}
+      has_maven: ${{ steps.detect.outputs.has_maven }}
+      has_gradle: ${{ steps.detect.outputs.has_gradle }}
+      has_node: ${{ steps.detect.outputs.has_node }}
+      has_docker: ${{ steps.detect.outputs.has_docker }}
+      has_kubernetes: ${{ steps.detect.outputs.has_kubernetes }}
+      has_terraform: ${{ steps.detect.outputs.has_terraform }}
+      has_ansible: ${{ steps.detect.outputs.has_ansible }}
+      repository_matrix: ${{ steps.matrix.outputs.matrix }}
+      has_languages: ${{ steps.matrix.outputs.has_languages }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        name: Discover languages and artefacts
+        run: |
+          has_dotnet=$(git ls-files -- '*.sln' | head -n 1)
+          has_maven=$(git ls-files -- 'pom.xml' | head -n 1)
+          has_gradle=$(git ls-files -- 'build.gradle*' | head -n 1)
+          has_node=$(git ls-files -- 'package.json' | head -n 1)
+          has_docker=$(git ls-files -- '*Dockerfile' | head -n 1)
+          has_kubernetes=$(git ls-files -- '*.yaml' '*.yml' | grep -E '(k8s|kubernetes|helm|chart|manifests|deployment|statefulset)' | head -n 1 || true)
+          has_terraform=$(git ls-files -- '*.tf' | head -n 1)
+          has_ansible=$(git ls-files -- 'ansible.cfg' | head -n 1)
+
+          echo "has_dotnet=${has_dotnet:+true}" >> "$GITHUB_OUTPUT"
+          echo "has_maven=${has_maven:+true}" >> "$GITHUB_OUTPUT"
+          echo "has_gradle=${has_gradle:+true}" >> "$GITHUB_OUTPUT"
+          echo "has_node=${has_node:+true}" >> "$GITHUB_OUTPUT"
+          echo "has_docker=${has_docker:+true}" >> "$GITHUB_OUTPUT"
+          echo "has_kubernetes=${has_kubernetes:+true}" >> "$GITHUB_OUTPUT"
+          echo "has_terraform=${has_terraform:+true}" >> "$GITHUB_OUTPUT"
+          echo "has_ansible=${has_ansible:+true}" >> "$GITHUB_OUTPUT"
+
+      - id: matrix
+        name: Build language matrix
+        run: |
+          python <<'PY'
+          import json, os
+          def truthy(v): return (v or '').lower() == 'true'
+          includes = []
+          if truthy(os.environ.get('has_dotnet')):      includes.append({"language": "dotnet"})
+          if truthy(os.environ.get('has_maven')):       includes.append({"language": "java-maven"})
+          if truthy(os.environ.get('has_gradle')):      includes.append({"language": "java-gradle"})
+          if truthy(os.environ.get('has_node')):        includes.append({"language": "node"})
+          matrix = {"include": includes}
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as fh:
+              fh.write(f"matrix={json.dumps(matrix)}\n")
+              fh.write(f"has_languages={'true' if includes else 'false'}\n")
+          PY
+        env:
+          has_dotnet: ${{ steps.detect.outputs.has_dotnet }}
+          has_maven: ${{ steps.detect.outputs.has_maven }}
+          has_gradle: ${{ steps.detect.outputs.has_gradle }}
+          has_node: ${{ steps.detect.outputs.has_node }}
+
+  language_scans:
+    name: Language build and dependency checks
+    runs-on: ubuntu-latest
+    needs: [detect, changed]
+    if: needs.detect.outputs.has_languages == 'true' && (needs.changed.outputs.dotnet == 'true' || needs.changed.outputs.node == 'true')
+    strategy:
+      matrix: ${{ fromJSON(needs.detect.outputs.repository_matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        if: matrix.language == 'dotnet'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Cache NuGet packages
+        if: matrix.language == 'dotnet'
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props') }}
+
+      - name: Restore .NET solutions
+        if: matrix.language == 'dotnet'
+        run: dotnet restore Momentum.sln
+
+      - name: Build .NET
+        if: matrix.language == 'dotnet'
+        run: dotnet build Momentum.sln --configuration Release --no-restore
+
+      - name: Test .NET
+        if: matrix.language == 'dotnet'
+        run: dotnet test Momentum.sln --configuration Release --no-build --logger trx --results-directory $REPORT_DIR/dotnet-tests
+
+      - name: Audit .NET packages
+        if: matrix.language == 'dotnet'
+        run: |
+          mkdir -p $REPORT_DIR
+          dotnet list package --vulnerable --include-transitive --format json > $REPORT_DIR/dotnet-packages.json || dotnet list package --vulnerable --include-transitive > $REPORT_DIR/dotnet-packages.txt
+
+      - name: Setup Java
+        if: startsWith(matrix.language, 'java-')
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: ${{ matrix.language == 'java-maven' && 'maven' || matrix.language == 'java-gradle' && 'gradle' || '' }}
+
+      - name: Build with Maven
+        if: matrix.language == 'java-maven'
+        run: mvn -B -ntp verify
+
+      - name: Build with Gradle
+        if: matrix.language == 'java-gradle'
+        run: |
+          chmod +x gradlew || true
+          ./gradlew build
+
+      - name: Restore Dependency-Check cache
+        if: startsWith(matrix.language, 'java-')
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: ${{ runner.os }}-dependency-check-data
+
+      - name: Run Dependency-Check scan
+        if: startsWith(matrix.language, 'java-')
+        uses: dependency-check/Dependency-Check_Action@main
+        env:
+          # Workaround raccomandato quando si usa anche setup-java nel workflow
+          JAVA_HOME: /opt/jdk
+        with:
+          project: 'Momentum'
+          path: ${{ github.workspace }}          # cartella da scansionare
+          format: 'HTML'                         # uno dei formati
+          out: ${{ env.REPORT_DIR }}             # cartella report
+          args: >-                               
+            --format SARIF                       # secondo formato
+            --suppression ${{ github.workspace }}/dependency-check-suppression.xml
+            # opzionale: se vuoi forzare una data dir specifica della CLI
+            # --data /home/runner/work/_temp/depcheck-data
+
+
+      - name: Setup Node
+        if: matrix.language == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            **/package-lock.json
+            **/pnpm-lock.yaml
+            **/yarn.lock
+
+      - name: Install Node dependencies
+        if: matrix.language == 'node'
+        run: npm ci --ignore-scripts || npm install --ignore-scripts
+
+      - name: npm audit
+        if: matrix.language == 'node'
+        run: |
+          mkdir -p $REPORT_DIR
+          npm audit --json > $REPORT_DIR/npm-audit.json
+
+      - name: Run retire.js
+        if: matrix.language == 'node'
+        run: npx retire --outputformat json --outputpath $REPORT_DIR/retire.json || true
+
+      - name: Upload language artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: language-${{ matrix.language }}-reports
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  secret_scan:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    needs: [detect]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'   # >= 1.24
+
+      - name: Install Gitleaks (Go)
+        env:
+          GOBIN: ${{ runner.temp }}/bin
+        run: |
+          mkdir -p "$GOBIN"
+          echo "$GOBIN" >> "$GITHUB_PATH"
+          go install github.com/zricethezav/gitleaks/v8@latest   # path corretto
+
+      - name: Gitleaks version
+        run: gitleaks version
+
+      - name: Gitleaks scan (CLI)
+        run: |
+          mkdir -p "$REPORT_DIR"
+          gitleaks detect \
+            --source="${{ github.workspace }}" \
+            --redact \
+            --report-format sarif \
+            --report-path "${{ github.workspace }}/$REPORT_DIR/secrets-gitleaks.sarif" \
+            --config="${{ github.workspace }}/.gitleaks.toml" \
+            || true
+
+
+      - name: Upload secret scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  semgrep_scan:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    needs: [detect]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Semgrep (OWASP Top 10)
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install --upgrade semgrep
+          mkdir -p "$REPORT_DIR"
+          # Scan con le rules desiderate + output SARIF per GitHub Code Scanning
+          semgrep scan \
+            --config p/owasp-top-ten \
+            --config r/sec-benchmarks \
+            --sarif -o "$REPORT_DIR/sast-semgrep.sarif" \
+            --no-error || true
+        env:
+          REPORT_DIR: ${{ env.REPORT_DIR }}
+
+
+      - name: Move Semgrep SARIF
+        run: |
+          mkdir -p $REPORT_DIR
+          find . -name "*semgrep.sarif" -exec mv {} $REPORT_DIR/sast-semgrep.sarif \; || true
+
+      - name: Upload Semgrep results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sast
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  trivy_fs_scan:
+    name: Application filesystem scan
+    runs-on: ubuntu-latest
+    needs: [detect, changed]
+    if: needs.changed.outputs.code == 'true'   # o restringi a src/**
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare report directory
+        run: mkdir -p $REPORT_DIR
+
+      - name: Scan repository with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,config
+          format: sarif
+          output: ${{ github.workspace }}/$REPORT_DIR/sast-trivy-fs.sarif
+          exit-code: '0'
+
+      - name: Upload Trivy filesystem results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  sbom_and_deps:
+    name: SBOM and dependency scanning
+    runs-on: ubuntu-latest
+    needs: [detect]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare report directory
+        run: mkdir -p "$REPORT_DIR"
+
+      - name: Generate SBOM (CycloneDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: ${{ env.REPORT_DIR }}/sbom-cyclonedx.json
+          upload-artifact: false
+
+      - name: Scan SBOM with Grype
+        uses: anchore/scan-action@v6
+        with:
+          sbom: ${{ env.REPORT_DIR }}/sbom-cyclonedx.json
+          fail-build: false
+          severity-cutoff: high
+          output-format: sarif
+          output-file: ${{ env.REPORT_DIR }}/deps-grype.sarif
+
+      - name: OSV Scanner SBOM validation
+        run: |
+          mkdir -p "$REPORT_DIR"
+          # produce direttamente un SARIF per Code Scanning
+          osv-scanner scan \
+            --format sarif \
+            --output "$REPORT_DIR/deps-osv.sarif" \
+            --sbom "$REPORT_DIR/sbom-cyclonedx.json" \
+            || true
+
+
+      - name: Upload SBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  container_scan:
+    name: Container security
+    runs-on: ubuntu-latest
+    needs: [detect, changed]
+    if: needs.detect.outputs.has_docker == 'true' && needs.changed.outputs.docker == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Discover Dockerfiles
+        id: dockerfiles
+        run: |
+          mapfile -t files < <(git ls-files -- '*Dockerfile')
+          printf 'files=%s\n' "${files[*]}" >> "$GITHUB_OUTPUT"
+          mkdir -p $REPORT_DIR
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.0
+        with:
+          cache: true
+          version: v0.65.0
+
+      - name: Trivy config scan for Dockerfiles
+        if: steps.dockerfiles.outputs.files != ''
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scanners: misconfig,secret
+          format: sarif
+          exit-code: '0'
+          scan-ref: ${{ github.workspace }}
+          output: ${{ github.workspace }}/$REPORT_DIR/container-trivy-config.sarif
+
+      - name: Build docker images (metadata only)
+        id: build-images
+        run: |
+          mapfile -t files < <(git ls-files -- '*Dockerfile')
+          for file in "${files[@]}"; do
+            image="ghcr.io/${{ github.repository_owner }}/$(basename "${file%Dockerfile}"):${{ github.sha }}"
+            docker build -f "$file" -t "$image" . || true
+            echo "$image" >> $REPORT_DIR/docker-images.txt
+          done
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Flag image availability
+        run: |
+          if [ -s "$REPORT_DIR/docker-images.txt" ]; then
+            echo "has_images=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_images=false" >> "$GITHUB_OUTPUT"
+          fi
+        id: images-flag
+
+      - name: Trivy image scan
+        if: steps.images-flag.outputs.has_images == 'true'
+        run: |
+          while read -r image; do
+            [ -z "$image" ] && continue
+            trivy image --severity HIGH,CRITICAL --format sarif --output "$REPORT_DIR/container-trivy-${image##*/}.sarif" "$image" || true
+          done < $REPORT_DIR/docker-images.txt
+
+      - name: Upload container artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-security
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  iac_scan:
+    name: IaC and Kubernetes security
+    runs-on: ubuntu-latest
+    needs: [detect, changed]
+    if: >-
+      (needs.detect.outputs.has_kubernetes == 'true' ||
+      needs.detect.outputs.has_terraform == 'true' ||
+      needs.detect.outputs.has_ansible == 'true' ) && needs.changed.outputs.iac == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare report directory
+        run: mkdir -p $REPORT_DIR
+
+      - name: kube-linter scan
+        if: needs.detect.outputs.has_kubernetes == 'true'
+        run: |
+          curl -sSL https://github.com/stackrox/kube-linter/releases/latest/download/kube-linter-linux-amd64.tar.gz | tar -xz
+          ./kube-linter-linux-amd64/kube-linter lint . --format sarif > $REPORT_DIR/k8s-kube-linter.sarif || true
+
+      - name: tfsec scan
+        if: needs.detect.outputs.has_terraform == 'true'
+        run: |
+          curl -sSL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 -o /tmp/tfsec
+          chmod +x /tmp/tfsec
+          /tmp/tfsec --format sarif --out $REPORT_DIR/iac-tfsec.sarif || true
+
+      - name: Checkov scan
+        if: needs.detect.outputs.has_terraform == 'true'
+        run: |
+          python3 -m pip install --upgrade checkov
+          checkov -d . --output sarif --output-file-path $REPORT_DIR/iac-checkov.sarif || true
+
+      - name: Ansible lint
+        if: needs.detect.outputs.has_ansible == 'true'
+        run: |
+          python3 -m pip install --upgrade ansible ansible-lint
+          ansible-lint -f sarif -p --config-file docs/security/ansible-lint.yml > $REPORT_DIR/ansible-lint.sarif || true
+
+      - name: kube-bench (optional)
+        if: needs.detect.outputs.has_kubernetes == 'true'
+        run: |
+          curl -sSL https://github.com/aquasecurity/kube-bench/releases/latest/download/kube-bench_1.7.1_linux_amd64.tar.gz | tar -xz
+          ./kube-bench --json > $REPORT_DIR/k8s-kube-bench.json || true
+
+      - name: kube-hunter (opt-in)
+        if: needs.detect.outputs.has_kubernetes == 'true' && env.ENABLE_KUBE_HUNTER == 'true'
+        run: |
+          docker run --rm -it aquasec/kube-hunter --remote ${PREVIEW_BASE_URL} || true
+
+      - name: Upload IaC artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iac-security
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  dast:
+    name: DAST (ZAP + Nuclei)
+    runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.preview_url != '') || (github.event_name != 'workflow_dispatch' && vars.PREVIEW_BASE_URL != '') }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare report directory
+        run: mkdir -p $REPORT_DIR
+
+      - name: Run OWASP ZAP Baseline
+        uses: zaproxy/action-baseline@v0.13.0
+        with:
+          target: ${{ env.PREVIEW_BASE_URL }}
+          cmd_options: -a -m 10 -T 5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move ZAP report
+        run: |
+          mkdir -p $REPORT_DIR
+          for file in zap_report.html zap_report.md owasp-zap-scan-report.xml owasp-zap-scan-report.json; do
+            if [ -f "$file" ]; then
+              base=$(basename "$file")
+              mv "$file" "$REPORT_DIR/${base/zap_report/zap-baseline}" || mv "$file" "$REPORT_DIR/$base"
+            fi
+          done
+
+      - name: Run Nuclei scan (Docker)
+        run: |
+          mkdir -p "$REPORT_DIR"
+          docker run --rm \
+            -v "$PWD/${REPORT_DIR}:/out" \
+            projectdiscovery/nuclei:latest \
+            -u "${PREVIEW_BASE_URL}" \
+            -severity medium,high,critical \
+            -json -o "/out/dast-nuclei.json" || true
+
+
+      - name: Convert Nuclei JSON to SARIF
+        run: |
+          python <<'PY'
+          import json, pathlib
+          sarif_path = pathlib.Path('${{ github.workspace }}/$REPORT_DIR/dast-nuclei.sarif')
+          json_path = pathlib.Path('${{ github.workspace }}/$REPORT_DIR/dast-nuclei.json')
+          if not json_path.exists():
+              sarif_path.write_text('', encoding='utf-8')
+              raise SystemExit(0)
+          data = []
+          for line in json_path.read_text(encoding='utf-8').splitlines():
+              line = line.strip()
+              if not line:
+                  continue
+              try:
+                  data.append(json.loads(line))
+              except json.JSONDecodeError:
+                  continue
+          results = []
+          for finding in data:
+              sev = (finding.get('info', {}).get('severity') or 'medium').lower()
+              message = finding.get('info', {}).get('name') or finding.get('template-id', 'nuclei finding')
+              description = finding.get('info', {}).get('description') or finding.get('matcher-status', '')
+              results.append({
+                  'ruleId': finding.get('template-id', 'nuclei'),
+                  'level': 'error' if sev in ('critical', 'high') else 'warning' if sev == 'medium' else 'note',
+                  'message': {'text': f"{message}: {description}"},
+                  'properties': {
+                      'severity': sev,
+                      'url': finding.get('matched-at'),
+                      'tags': finding.get('tags')
+                  }
+              })
+          sarif = {
+              '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
+              'version': '2.1.0',
+              'runs': [{
+                  'tool': {'driver': {'name': 'Nuclei','informationUri': 'https://nuclei.projectdiscovery.io','rules': []}},
+                  'results': results
+              }]}
+          sarif_path.write_text(json.dumps(sarif, indent=2), encoding='utf-8')
+          PY
+
+      - name: Upload DAST artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast
+          path: $REPORT_DIR
+          if-no-files-found: ignore
+
+  upload_sarif:
+    name: Publish SARIF to code scanning
+    runs-on: ubuntu-latest
+    needs:
+      - language_scans
+      - secret_scan
+      - semgrep_scan
+      - trivy_fs_scan
+      - sbom_and_deps
+      - container_scan
+      - iac_scan
+      - dast
+    if: always()
+    steps:
+      - name: Download SARIF artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: sarif-artifacts
+
+      - name: Upload SARIF files
+        run: |
+          shopt -s globstar
+          find sarif-artifacts -name '*.sarif' -print0 | while IFS= read -r -d '' file; do
+            echo "Uploading $file"
+            gh code-scanning upload --sarif "$file" --tool-name "security-suite" || true
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    name: Summarise findings and gate PR
+    runs-on: ubuntu-latest
+    needs:
+      - detect
+      - language_scans
+      - secret_scan
+      - semgrep_scan
+      - trivy_fs_scan
+      - sbom_and_deps
+      - container_scan
+      - iac_scan
+      - dast
+    if: always()
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: collected
+
+      - name: Aggregate SARIF findings
+        id: aggregate
+        run: |
+          python <<'PY'
+          import json, pathlib, os
+          report_root = pathlib.Path('collected')
+          sarif_files = sorted(report_root.glob('**/*.sarif'))
+          summary = {}
+          severity_map = ['critical', 'high', 'medium', 'low', 'info']
+          def map_severity(value, level):
+              if value is None and level is None: return 'info'
+              if value is not None:
+                  try:
+                      numeric = float(value)
+                      if numeric >= 9.0: return 'critical'
+                      if numeric >= 7.0: return 'high'
+                      if numeric >= 4.0: return 'medium'
+                      if numeric > 0:    return 'low'
+                      return 'info'
+                  except ValueError:
+                      lowered = str(value).lower()
+                      if lowered in severity_map: return lowered
+              if level:
+                  level = str(level).lower()
+                  if level == 'error':   return 'high'
+                  if level == 'warning': return 'medium'
+                  if level == 'note':    return 'low'
+              return 'info'
+          for sarif_path in sarif_files:
+              category = sarif_path.stem.split('-', 1)[0]
+              counts = summary.setdefault(category, {sev: 0 for sev in severity_map})
+              try:
+                  data = json.load(open(sarif_path, 'r', encoding='utf-8'))
+              except Exception:
+                  continue
+              for run in data.get('runs', []):
+                  default_severity = run.get('properties', {}).get('severity')
+                  for result in run.get('results', []):
+                      sev = map_severity(
+                          result.get('properties', {}).get('security-severity')
+                          or result.get('properties', {}).get('severity')
+                          or default_severity,
+                          result.get('level')
+                      )
+                      counts[sev] += 1
+          totals = {sev: sum(category.get(sev, 0) for category in summary.values()) for sev in severity_map}
+          high_threshold = int('${{ env.HIGH_SEVERITY_THRESHOLD }}')
+          should_fail = totals.get('critical', 0) >= 1 or totals.get('high', 0) >= high_threshold
+          summary_md_lines = ["## Security Summary", '', "| Category | Critical | High | Medium | Low | Info |", "| --- | --- | --- | --- | --- | --- |"]
+          for category, counts in sorted(summary.items()):
+              summary_md_lines.append(f"| {category} | {counts['critical']} | {counts['high']} | {counts['medium']} | {counts['low']} | {counts['info']} |")
+          summary_md_lines.append('')
+          summary_md_lines.append(f"**Totals**: Critical={totals['critical']}, High={totals['high']} (threshold={high_threshold}), Medium={totals['medium']}, Low={totals['low']}, Info={totals['info']}")
+          summary_md_lines.append('')
+          summary_md_lines.append(f"Gate status: {'❌ Blocked' if should_fail else '✅ Passing'}")
+          report = '\n'.join(summary_md_lines)
+          pathlib.Path('${{ env.REPORT_DIR }}').mkdir(exist_ok=True)
+          (pathlib.Path('${{ env.REPORT_DIR }}') / 'security-summary.md').write_text(report, encoding='utf-8')
+          (pathlib.Path('${{ env.REPORT_DIR }}') / 'security-summary.json').write_text(json.dumps({'categories': summary, 'totals': totals, 'should_fail': should_fail}, indent=2), encoding='utf-8')
+          print(report)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+              fh.write(f"should_fail={str(should_fail).lower()}\n")
+          PY
+
+      - name: Upload summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-summary
+          path: $REPORT_DIR
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summaryPath = process.env.REPORT_DIR + '/security-summary.md';
+            let body = fs.readFileSync(summaryPath, 'utf8');
+            body += '\n\n' + 'Latest run: ' + new Date().toISOString();
+            const header = '<!-- security-pr-checks -->';
+            const commentBody = `${header}\n${body}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.startsWith(header));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body: commentBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body: commentBody,
+              });
+            }
+
+      - name: Apply attention label when gate fails
+        if: steps.aggregate.outputs.should_fail == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: security:attention
+
+      - name: Fail when gate fails
+        if: steps.aggregate.outputs.should_fail == 'true'
+        run: |
+          echo "Security gate failed due to severity thresholds" >&2
+          exit 1
