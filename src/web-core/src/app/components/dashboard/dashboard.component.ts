@@ -26,7 +26,7 @@ export class DashboardComponent {
   readonly manifestRows = computed(() => {
     const manifest = this.manifest.manifestSnapshot;
     if (!manifest) {
-      return [] as Array<Record<string, unknown>>;
+      return [] as Record<string, unknown>[];
     }
     return manifest.remotes.map(remote => ({
       id: remote.id,

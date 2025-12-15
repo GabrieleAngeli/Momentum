@@ -36,7 +36,7 @@ class AuthServiceStub {
 @Component({
   standalone: true,
   imports: [IfPermissionDirective],
-  template: `<span *ifPermission="'feature-a:view'">Allowed</span>`
+  template: `<span appIfPermission="'feature-a:view'">Allowed</span>`
 })
 class HostComponent {}
 

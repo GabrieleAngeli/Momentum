@@ -3,12 +3,12 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AuthService } from './auth.service';
 
 @Directive({
-  selector: '[ifPermission]',
+  selector: '[appIfPermission]',
   standalone: true
 })
 export class IfPermissionDirective {
   private readonly view = inject(ViewContainerRef);
-  private readonly template = inject(TemplateRef<any>);
+  private readonly template = inject(TemplateRef<unknown>);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
   private permission = '';
@@ -18,7 +18,7 @@ export class IfPermissionDirective {
     this.auth.auth$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.update());
   }
 
-  @Input('ifPermission') set required(permission: string) {
+  @Input('appIfPermission') set required(permission: string) {
     this.permission = permission;
     this.update();
   }

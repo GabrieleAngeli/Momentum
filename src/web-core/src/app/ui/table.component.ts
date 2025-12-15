@@ -34,6 +34,6 @@ import { NgFor, NgIf } from '@angular/common';
 })
 export class UiTableComponent {
   @Input() columns: string[] = [];
-  @Input() data: Array<Record<string, unknown>> = [];
+  @Input() data: Record<string, unknown>[] = [];
   @Input() emptyState = 'Nothing to display';
 }

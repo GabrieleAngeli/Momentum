@@ -31,7 +31,7 @@ import { FormsModule } from '@angular/forms';
 export class UiInputComponent {
   @Input() label?: string;
   @Input() placeholder?: string;
-  @Input() type: string = 'text';
+  @Input() type = 'text';
   @Input() value = '';
   @Output() readonly valueChange = new EventEmitter<string>();
 }

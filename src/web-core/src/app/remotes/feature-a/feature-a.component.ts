@@ -8,7 +8,7 @@ import { FeatureFlagService } from '../../core/feature-flag.service';
 
 @Component({
   standalone: true,
-  selector: 'remote-feature-a',
+  selector: 'app-feature-a',
   imports: [CommonModule, TranslateModule, UiButtonComponent, UiInputComponent, UiTableComponent],
   template: `
     <section class="feature-a">
@@ -36,7 +36,7 @@ import { FeatureFlagService } from '../../core/feature-flag.service';
 export class FeatureARemoteComponent {
   private readonly flags = inject(FeatureFlagService);
   readonly name = signal('');
-  readonly rows = signal<Array<Record<string, unknown>>>([]);
+  readonly rows = signal<Record<string, unknown>[]>([]);
 
   get flagEnabled(): boolean {
     return this.flags.getBoolean('featureA.enabled', true);

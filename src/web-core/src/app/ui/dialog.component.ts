@@ -11,7 +11,7 @@ import { NgIf } from '@angular/common';
     <section class="ui-dialog" *ngIf="open" role="dialog" aria-modal="true">
       <header class="ui-dialog__header">
         <h2>{{ title }}</h2>
-        <app-ui-button variant="ghost" size="sm" (clicked)="close.emit()">×</app-ui-button>
+        <app-ui-button variant="ghost" size="sm" (clicked)="closed.emit()">×</app-ui-button>
       </header>
       <div class="ui-dialog__body">
         <ng-content></ng-content>
@@ -60,6 +60,7 @@ import { NgIf } from '@angular/common';
 export class UiDialogComponent {
   @Input() open = false;
   @Input() title = '';
-  @Output() readonly close = new EventEmitter<void>();
+  @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly backdropClick = new EventEmitter<void>();
+  
 }

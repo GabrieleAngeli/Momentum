@@ -3,12 +3,12 @@ import { FeatureFlagService } from './feature-flag.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 @Directive({
-  selector: '[ifFlag]',
+  selector: '[appIfFlag]',
   standalone: true
 })
 export class IfFlagDirective {
   private readonly view = inject(ViewContainerRef);
-  private readonly template = inject(TemplateRef<any>);
+  private readonly template = inject(TemplateRef<unknown>);
   private readonly flags = inject(FeatureFlagService);
   private readonly destroyRef = inject(DestroyRef);
   private hasView = false;
@@ -18,7 +18,7 @@ export class IfFlagDirective {
     this.flags.changes.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.update());
   }
 
-  @Input('ifFlag') set flagKey(key: string) {
+  @Input('appIfFlag') set flagKey(key: string) {
     this.currentKey = key;
     this.update();
   }
