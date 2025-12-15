@@ -1,4 +1,5 @@
 using Identifier.Application.Abstractions;
+using Identifier.Domain.Entities;
 using Identifier.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,7 +31,9 @@ public class LicenseService : ILicenseService
             {
                 LicenseId = l.Id,
                 Entitlements = l.Entitlements.Select(e => new { e.Quota, e.ConstraintsJson, FeatureKey = e.Feature.Key }).ToList(),
-                Modules = l.Modules.Select(lm => lm.Module).Select(m => new
+                Modules = l.Modules.Select(lm => lm.Module)
+                .OfType<Module>() 
+                .Select(m => new
                 {
                     ModuleKey = m.Key,
                     FeatureKeys = m.Features.Select(mf => mf.Feature.Key).ToList()

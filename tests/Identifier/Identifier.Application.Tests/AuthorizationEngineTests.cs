@@ -7,6 +7,7 @@ using Identifier.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Moq;
+using Xunit;
 
 namespace Identifier.Application.Tests;
 

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Identifier.Infrastructure.Seeding;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace Identifier.Api.IntegrationTests;
 

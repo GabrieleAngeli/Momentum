@@ -39,7 +39,7 @@ var pubSub = builder.AddDaprPubSub("pubsub")
 var coreWeb = builder.AddProject<Projects.CoreWeb_Api>("core-web-api")
     .WithDaprSidecar()
     .WithReference(redis)
-    .WithReference(pubSub)
+//    .WithReference(pubSub)
     .WithHttpEndpoint(port: 5080, targetPort: 8080, name: "http");
 
 var ignite = builder.AddContainer("ignite-momentum", "apacheignite/ignite", "2.16.0")

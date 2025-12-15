@@ -8,6 +8,6 @@ public class Entitlement
     public int? Quota { get; set; }
     public string? ConstraintsJson { get; set; }
 
-    public License? License { get; set; }
-    public Feature? Feature { get; set; }
+    public License License { get; set; } = null!;
+    public Feature Feature { get; set; } = null!;
 }

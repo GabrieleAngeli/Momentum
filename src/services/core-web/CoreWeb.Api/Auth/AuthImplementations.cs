@@ -60,7 +60,7 @@ public sealed class DefaultPasswordSignInManager : IPasswordSignInManager
         var requiresMfa = string.Equals(tuple.User.Email, "admin@example.com", StringComparison.OrdinalIgnoreCase);
         if (requiresMfa)
         {
-            return Task.FromResult(AuthResult.RequiresMfa(tuple.User));
+            return Task.FromResult(AuthResult.MfaRequires(tuple.User));
         }
 
         return Task.FromResult(AuthResult.Success(tuple.User));

@@ -66,8 +66,7 @@ services.AddOpenTelemetry()
         tracing.AddAspNetCoreInstrumentation();
         tracing.AddHttpClientInstrumentation();
         tracing.AddSource("CoreWeb");
-    })
-    .StartWithHost();
+    });
 
 var signingKey = configuration["Auth:Jwt:SigningKey"] ?? "development-signing-key-please-change";
 var signingKeyBytes = Encoding.UTF8.GetBytes(signingKey);
@@ -97,7 +96,7 @@ services.AddAuthentication(options =>
     options.Events.OnValidatePrincipal = async ctx =>
     {
         var sessionStore = ctx.HttpContext.RequestServices.GetRequiredService<ISessionStore>();
-        if (!await sessionStore.ExistsAsync(ctx.Principal))
+        if (ctx.Principal == null && (ctx.Principal != null && !await sessionStore.ExistsAsync(ctx.Principal)))
         {
             ctx.RejectPrincipal();
         }

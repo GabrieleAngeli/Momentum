@@ -142,7 +142,11 @@ public sealed class IdentifierGrpcService : Identifier.Rpc.V1.IdentifierService.
 
         if (evaluation.RemainingQuota.HasValue)
         {
-            response.RemainingQuota = new Int32Value { Value = evaluation.RemainingQuota.Value };
+            response.RemainingQuota = evaluation.RemainingQuota.Value; // oppure evaluation.RemainingQuota
+        }
+        else
+        {
+            response.RemainingQuota = null;
         }
 
         return response;

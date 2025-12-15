@@ -31,9 +31,9 @@ public interface IJwtIssuer
     string IssueToken(UserPrincipalDto user, TimeSpan lifetime);
 }
 
-public sealed record AuthResult(bool Succeeded, bool RequiresMfa, UserPrincipalDto? User, string? Error = null)
+public sealed record AuthResult(bool Succeeded, bool RequiresMfaed, UserPrincipalDto? User, string? Error = null)
 {
     public static AuthResult Success(UserPrincipalDto user) => new(true, false, user);
-    public static AuthResult RequiresMfa(UserPrincipalDto user) => new(false, true, user);
+    public static AuthResult MfaRequires(UserPrincipalDto user) => new(false, true, user);
     public static AuthResult Failed(string error) => new(false, false, null, error);
 }

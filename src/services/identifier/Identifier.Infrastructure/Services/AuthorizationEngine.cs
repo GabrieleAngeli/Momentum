@@ -36,12 +36,25 @@ public class AuthorizationEngine : IAuthorizationEngine
                 u.Id,
                 u.Active,
                 u.OrganizationId,
-                GroupIds = u.UserGroups.Select(ug => ug.GroupId).ToList(),
+
+                GroupIds = u.UserGroups
+                    .Select(ug => ug.GroupId)
+                    .ToList(),
+
                 Permissions = u.UserGroups
-                    .SelectMany(ug => ug.Group.GroupRoles)
-                    .SelectMany(gr => gr.Role.RolePermissions)
-                    .Select(rp => new PermissionSummary(rp.Permission.Code, rp.Permission.Resource, rp.Permission.Action))
+                    .Where(ug => ug.Group != null)
+                    .SelectMany(ug => ug.Group!.GroupRoles)
+                    .Where(gr => gr.Role != null)
+                    .SelectMany(gr => gr.Role!.RolePermissions)
+                    .Where(rp => rp.Permission != null)
+                    .Select(rp => new
+                    {
+                        rp.Permission!.Code,
+                        rp.Permission!.Resource,
+                        rp.Permission!.Action
+                    })
                     .Distinct()
+                    .Select(p => new PermissionSummary(p.Code, p.Resource, p.Action))
                     .ToList()
             })
             .FirstOrDefaultAsync(cancellationToken);

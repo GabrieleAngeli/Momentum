@@ -1,48 +1,63 @@
 using System.Linq;
+using System.Threading.Tasks;
 using Identifier.Infrastructure.Persistence;
+using Identifier.Infrastructure.Seeding;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Testcontainers.PostgreSql;
+using Xunit;
 
 namespace Identifier.Api.IntegrationTests;
 
-public class IdentifierApiFactory : WebApplicationFactory<Program>
+public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlTestcontainer _timescaleContainer;
-    private bool _initialized;
+    private readonly PostgreSqlContainer _timescaleContainer;
 
     public IdentifierApiFactory()
     {
-        var configuration = new PostgreSqlTestcontainerConfiguration
-        {
-            Database = "identifier",
-            Username = "postgres",
-            Password = "postgres",
-            Image = "timescale/timescaledb-ha:pg15.5-ts2.13.1"
-        };
-
-        _timescaleContainer = new PostgreSqlTestcontainer(configuration);
+        _timescaleContainer = new PostgreSqlBuilder()
+            .WithDatabase("identifier")
+            .WithUsername("postgres")
+            .WithPassword("postgres")
+            //TODO fix on configuration
+            .WithImage("timescale/timescaledb-ha:pg15.5-ts2.13.1")
+            .Build();
     }
+
+    public async Task InitializeAsync()
+    {
+        await _timescaleContainer.StartAsync();
+    }
+
+    // xUnit: DEVE essere Task, quindi implementazione esplicita
+    Task IAsyncLifetime.DisposeAsync() => DisposeAsync().AsTask();
+
+    // WebApplicationFactory: override "vero" (ValueTask)
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        await _timescaleContainer.DisposeAsync();
+    }
+
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        EnsureContainerStarted();
-
         builder.ConfigureServices(services =>
         {
-            var descriptor = services.SingleOrDefault(d => d.ServiceType == typeof(DbContextOptions<IdentifierDbContext>));
-            if (descriptor is not null)
-            {
-                services.Remove(descriptor);
-            }
+            // Rimuove il DbContext registrato dall'app
+            services.RemoveAll<DbContextOptions<IdentifierDbContext>>();
 
+            // Registra quello puntato al container
             services.AddDbContext<IdentifierDbContext>(options =>
             {
-                options.UseNpgsql(_timescaleContainer.ConnectionString);
+                options.UseNpgsql(_timescaleContainer.GetConnectionString());
             });
 
+            // Applica migrazioni
             var sp = services.BuildServiceProvider();
             using var scope = sp.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<IdentifierDbContext>();
@@ -50,23 +65,23 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>
         });
     }
 
-    private void EnsureContainerStarted()
+    protected override IHost CreateHost(IHostBuilder builder)
     {
-        if (_initialized)
-        {
-            return;
-        }
+        var host = base.CreateHost(builder);
 
-        _timescaleContainer.StartAsync().GetAwaiter().GetResult();
-        _initialized = true;
+        using var scope = host.Services.CreateScope();
+
+        var db = scope.ServiceProvider.GetRequiredService<IdentifierDbContext>();
+
+        // 1) Crea schema/tabelle
+        db.Database.Migrate(); // oppure await MigrateAsync()
+
+        // 2) Seed dopo che le tabelle esistono
+        var seeder = scope.ServiceProvider.GetRequiredService<IdentifierSeeder>();
+        seeder.SeedAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        return host;
     }
 
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-        if (_initialized)
-        {
-            _timescaleContainer.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
-    }
+
 }

@@ -17,7 +17,7 @@ import { FeatureFlagService } from '../../core/feature-flag.service';
         <p>{{ 'featureA.description' | translate }}</p>
       </header>
       <div class="feature-a__form">
-        <app-ui-input label="{{ 'featureA.form.name' | translate }}" [(value)]="name()"></app-ui-input>
+        <app-ui-input label="{{ 'featureA.form.name' | translate }}" [value]="name()"(valueChange)="name.set($event)"></app-ui-input>
         <app-ui-button (clicked)="addRecord()">{{ 'featureA.actions.add' | translate }}</app-ui-button>
       </div>
       <app-ui-table [columns]="['name', 'created']" [data]="rows()"></app-ui-table>

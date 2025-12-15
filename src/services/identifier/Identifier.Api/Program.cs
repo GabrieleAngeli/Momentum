@@ -194,57 +194,58 @@ app.MapGet("/api/identifier/license/has-feature/{featureKey}", async (
     return operation;
 });
 
-app.MapPost("/api/identifier/seed", async (
-    IdentifierSeeder seeder,
-    IConfiguration config,
-    CancellationToken cancellationToken) =>
-{
-    return await ExecuteSeedAsync(seeder, config, force: false, cancellationToken);
-    {
-        return Results.NotFound();
-    }
+// app.MapPost("/api/identifier/seed", async (
+//     IdentifierSeeder seeder,
+//     IFeatureFlagProvider featureFlagProvider,
+//     IConfiguration config,
+//     CancellationToken cancellationToken) =>
+// {
+//     return await ExecuteSeedAsync(seeder, config, force: false, cancellationToken);
+//     {
+//         return Results.NotFound();
+//     }
 
-    var evaluation = await featureFlagProvider.EvaluateAsync(
-        flagId,
-        orgId,
-        userId,
-        groupIds ?? Array.Empty<Guid>(),
-        cancellationToken);
+//     var evaluation = await featureFlagProvider.EvaluateAsync(
+//         flagId,
+//         orgId,
+//         userId,
+//         groupIds ?? Array.Empty<Guid>(),
+//         cancellationToken);
 
-    var enabled = await featureFlagProvider.IsEnabledAsync(flagKey, orgId, userId, groupIds ?? Array.Empty<Guid>(), cancellationToken);
-    return Results.Json(new { flagKey, variation = evaluation, enabled });
-})
-.WithName("EvaluateFlag")
-.WithOpenApi(operation =>
-{
-    operation.Summary = "Evaluates a feature flag considering org/group/user overrides";
-    return operation;
-});
+//     var enabled = await featureFlagProvider.IsEnabledAsync(flagKey, orgId, userId, groupIds ?? Array.Empty<Guid>(), cancellationToken);
+//     return Results.Json(new { flagKey, variation = evaluation, enabled });
+// })
+// .WithName("EvaluateFlag")
+// .WithOpenApi(operation =>
+// {
+//     operation.Summary = "Evaluates a feature flag considering org/group/user overrides";
+//     return operation;
+// });
 
-app.MapGet("/api/identifier/license/has-feature/{featureKey}", async (
-    string featureKey,
-    [FromQuery] Guid orgId,
-    ILicenseService licenseService,
-    CancellationToken cancellationToken) =>
-{
-    var evaluation = await licenseService.EvaluateAsync(orgId, featureKey, cancellationToken);
-    return Results.Json(new
-    {
-        organizationId = orgId,
-        featureKey,
-        hasLicense = evaluation.HasLicense,
-        included = evaluation.FeatureIncluded,
-        withinQuota = evaluation.WithinQuota,
-        evaluation.Reason,
-        evaluation.RemainingQuota
-    });
-})
-.WithName("HasFeature")
-.WithOpenApi(operation =>
-{
-    operation.Summary = "Checks whether an organization can access a feature";
-    return operation;
-});
+// app.MapGet("/api/identifier/license/has-feature/{featureKey}", async (
+//     string featureKey,
+//     [FromQuery] Guid orgId,
+//     ILicenseService licenseService,
+//     CancellationToken cancellationToken) =>
+// {
+//     var evaluation = await licenseService.EvaluateAsync(orgId, featureKey, cancellationToken);
+//     return Results.Json(new
+//     {
+//         organizationId = orgId,
+//         featureKey,
+//         hasLicense = evaluation.HasLicense,
+//         included = evaluation.FeatureIncluded,
+//         withinQuota = evaluation.WithinQuota,
+//         evaluation.Reason,
+//         evaluation.RemainingQuota
+//     });
+// })
+// .WithName("HasFeature")
+// .WithOpenApi(operation =>
+// {
+//     operation.Summary = "Checks whether an organization can access a feature";
+//     return operation;
+// });
 
 app.MapPost("/api/identifier/seed", async (
     IdentifierSeeder seeder,
@@ -309,7 +310,7 @@ static async Task<IResult> ExecuteSeedAsync(IdentifierSeeder seeder, IConfigurat
     await seeder.SeedAsync(cancellationToken);
     return Results.Ok(new { status = "seeded" });
 }
-app.MapGet("/", () => Results.Ok(new { service = "identifier", status = "ready" }));
+//app.MapGet("/", () => Results.Ok(new { service = "identifier", status = "ready" }));
 
 app.Run();
 

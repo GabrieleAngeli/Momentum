@@ -6,6 +6,7 @@ using Identifier.Infrastructure.Persistence;
 using Identifier.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Xunit;
 
 namespace Identifier.Application.Tests;
 

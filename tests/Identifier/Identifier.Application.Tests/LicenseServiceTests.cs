@@ -3,6 +3,7 @@ using Identifier.Domain.Entities;
 using Identifier.Infrastructure.Persistence;
 using Identifier.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Xunit;
 
 namespace Identifier.Application.Tests;
 
@@ -26,7 +27,7 @@ public class LicenseServiceTests
         await using var context = CreateContext();
         var orgId = Guid.NewGuid();
         var feature = new Feature { Id = Guid.NewGuid(), Key = "devices.core" };
-        var license = new License
+        var license = new Identifier.Domain.Entities.License
         {
             Id = Guid.NewGuid(),
             OrganizationId = orgId,

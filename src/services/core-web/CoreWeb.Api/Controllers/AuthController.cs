@@ -78,7 +78,7 @@ public sealed class AuthController : ControllerBase
         var result = await _passwordSignInManager.PasswordSignInAsync(request.Username, request.Password, cancellationToken);
         if (!result.Succeeded)
         {
-            if (result.RequiresMfa && result.User is not null)
+            if (result.RequiresMfaed && result.User is not null)
             {
                 return Ok(new LoginResponse
                 {
