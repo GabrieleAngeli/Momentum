@@ -7,7 +7,13 @@ import { NgIf } from '@angular/common';
   standalone: true,
   imports: [NgIf, UiButtonComponent],
   template: `
-    <div class="ui-dialog__backdrop" *ngIf="open" (click)="backdropClick.emit()"></div>
+    <button
+      type="button"
+      class="ui-dialog__backdrop"
+      *ngIf="open"
+      aria-label="Close dialog"
+      (click)="backdropClick.emit()">
+    </button>
     <section class="ui-dialog" *ngIf="open" role="dialog" aria-modal="true">
       <header class="ui-dialog__header">
         <h2>{{ title }}</h2>
