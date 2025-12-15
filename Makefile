@@ -22,8 +22,8 @@ e2e:
 	npx playwright test
 
 test:
-        dotnet test Momentum.sln || true
-        npm test --prefix src/web-core || true
+	-dotnet test Momentum.sln
+	-npm test --prefix src/web-core -- --watch=false --browsers=ChromeHeadless
 
 security:
-        tools/security/run-all.sh
+	tools/security/run-all.sh
