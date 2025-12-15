@@ -66,10 +66,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          if [[ -z "${LAST_TAG}" ]]; then LAST_TAG="v0.1.0"; fi
+
+          # Prendi l'ultimo tag STABILE (vX.Y.Z)
+          LAST_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1 || true)"
+          if [[ -z "${LAST_TAG}" ]]; then
+            LAST_TAG="v0.1.0"
+          fi
+
           BASE="${LAST_TAG#v}"
+
+          # Commit da ultimo tag stabile a HEAD
           COMMITS="$(git log --pretty=format:%s "${LAST_TAG}..HEAD" || true)"
+
           BUMP="patch"
           if echo "${COMMITS}" | grep -Eqi 'BREAKING CHANGE|!:' ; then
             BUMP="major"
@@ -80,13 +88,16 @@ jobs:
           else
             if [[ -n "${COMMITS}" ]]; then BUMP="patch"; fi
           fi
+
           IFS='.' read -r MA MI PA <<< "${BASE}"
           case "${BUMP}" in
             major) MA=$((MA+1)); MI=0; PA=0;;
             minor) MI=$((MI+1)); PA=0;;
             patch) PA=$((PA+1));;
           esac
+
           NEW_VERSION="${MA}.${MI}.${PA}"
+
           echo "new_version=${NEW_VERSION}"             >> "$GITHUB_OUTPUT"
           echo "release_branch=release/v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${NEW_VERSION}"                    >> "$GITHUB_OUTPUT"
@@ -110,22 +121,24 @@ jobs:
           esac
 
           BASE_VERSION="${SOURCE_VERSION:-${DEFAULT_BASE}}"
+          # --- FIX START ---
+          BASE_VERSION="${BASE_VERSION#v}"
+          BASE_VERSION="${BASE_VERSION%%-*}"
+          # --- FIX END ---
+
           if [[ -z "${BASE_VERSION}" ]]; then
             echo "Missing base version" >&2
             exit 1
           fi
 
           BUILD="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-0}}"
+
           if [[ "${CHANNEL}" == "stable" ]]; then
             TAG_NAME="v${BASE_VERSION}"
             IS_PRERELEASE="false"
             IS_LATEST="true"
             RELEASE_NAME="🚀 v${BASE_VERSION}"
           else
-            if [[ -z "${BUILD}" ]]; then
-              echo "Missing build identifier for prerelease channel" >&2
-              exit 1
-            fi
             TAG_NAME="v${BASE_VERSION}-${CHANNEL}.${BUILD}"
             IS_PRERELEASE="true"
             IS_LATEST="false"
