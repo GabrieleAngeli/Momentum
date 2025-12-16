@@ -36,7 +36,7 @@ class AuthServiceStub {
 @Component({
   standalone: true,
   imports: [IfPermissionDirective],
-  template: `<span appIfPermission="'feature-a:view'">Allowed</span>`
+  template: `<span *appIfPermission="'feature-a:view'">Allowed</span>`
 })
 class HostComponent {}
 
@@ -55,12 +55,15 @@ describe('IfPermissionDirective', () => {
     fixture.detectChanges();
   });
 
-  it('renders when permission present', () => {
+  it('renders when permission present', async () => {
+    await fixture.whenStable();
+    fixture.detectChanges();
     expect(fixture.debugElement.query(By.css('span'))).not.toBeNull();
   });
 
-  it('hides when permission missing', () => {
+  it('hides when permission missing', async () => {
     auth.setPermissions([]);
+    await fixture.whenStable();
     fixture.detectChanges();
     expect(fixture.debugElement.query(By.css('span'))).toBeNull();
   });

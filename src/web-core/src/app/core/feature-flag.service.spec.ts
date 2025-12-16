@@ -1,5 +1,6 @@
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { FeatureFlagService } from './feature-flag.service';
 import { RealtimeService } from './realtime.service';
 import type { FlagsDelta } from '@core/types';
@@ -19,24 +20,31 @@ describe('FeatureFlagService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule],
-      providers: [{ provide: RealtimeService, useClass: RealtimeServiceStub }]
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: RealtimeService, useClass: RealtimeServiceStub },
+      ],
     });
+
     service = TestBed.inject(FeatureFlagService);
     http = TestBed.inject(HttpTestingController);
     realtime = TestBed.inject(RealtimeService) as any;
   });
 
-  afterEach(() => {
-    http.verify();
-  });
+  afterEach(() => http.verify());
 
   it('applies realtime deltas', async () => {
     const loadPromise = service.load();
-    http.expectOne('/api/flags').flush({ feature: { key: 'feature', value: true, type: 'boolean', scope: 'Global' } });
+    http.expectOne('/api/flags').flush({
+      feature: { key: 'feature', value: true, type: 'boolean', scope: 'Global' },
+    });
     await loadPromise;
 
-    realtime.flags$.next({ updated: { feature: { key: 'feature', value: false, type: 'boolean', scope: 'Global' } }, removed: [] });
+    realtime.flags$.next({
+      updated: { feature: { key: 'feature', value: false, type: 'boolean', scope: 'Global' } },
+      removed: [],
+    });
 
     expect(service.getBoolean('feature', true)).toBe(false);
   });

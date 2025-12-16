@@ -8,7 +8,9 @@ import { FeatureFlagService } from '../../core/feature-flag.service';
 
 class FakeTranslateLoader implements TranslateLoader {
   getTranslation() {
-    return of({});
+    return of({
+      'featureA.title': 'Feature A workspace',
+    });
   }
 }
 

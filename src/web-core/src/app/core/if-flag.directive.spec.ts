@@ -22,7 +22,7 @@ class FeatureFlagServiceStub {
 @Component({
   standalone: true,
   imports: [IfFlagDirective],
-  template: `<p appIfFlag="'demo.flag'">Visible</p>`
+  template: `<p *appIfFlag="'demo.flag'">Visible</p>`
 })
 class HostComponent {}
 
