@@ -26,8 +26,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "Features",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Key = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                Key = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {
@@ -38,8 +38,8 @@ public partial class Add_Identifier_Schema : Migration
             name: "Modules",
             columns: table => new
             {
-                Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                Key = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false)
+                Id = table.Column<Guid>(type: "uuid", nullable: false),
+                Key = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false)
             },
             constraints: table =>
             {

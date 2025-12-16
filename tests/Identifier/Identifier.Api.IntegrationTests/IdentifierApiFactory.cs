@@ -56,7 +56,7 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             {
                 options.UseNpgsql(_timescaleContainer.GetConnectionString(), npgsql =>
                 {
-                    npgsql.MigrationsAssembly("Identifier.Infrastructure"); // ✅ fondamentale
+                    npgsql.MigrationsAssembly(typeof(Identifier.Infrastructure.Migrations.Add_Identifier_Schema).Assembly.GetName().Name);
                 });
             });
         });
@@ -70,6 +70,10 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         var db = scope.ServiceProvider.GetRequiredService<IdentifierDbContext>();
 
         db.Database.Migrate();
+
+        // DEBUG: ti dice subito se ha migrato davvero
+        var applied = db.Database.GetAppliedMigrations().ToList();
+        Console.WriteLine("APPLIED: " + string.Join(", ", applied));
 
         var seeder = scope.ServiceProvider.GetRequiredService<IdentifierSeeder>();
         seeder.SeedAsync(CancellationToken.None).GetAwaiter().GetResult();
