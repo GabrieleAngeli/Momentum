@@ -46,22 +46,19 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseEnvironment("Test");
+
         builder.ConfigureServices(services =>
         {
-            // Rimuove il DbContext registrato dall'app
             services.RemoveAll<DbContextOptions<IdentifierDbContext>>();
 
-            // Registra quello puntato al container
             services.AddDbContext<IdentifierDbContext>(options =>
             {
-                options.UseNpgsql(_timescaleContainer.GetConnectionString());
+                options.UseNpgsql(_timescaleContainer.GetConnectionString(), npgsql =>
+                {
+                    npgsql.MigrationsAssembly("Identifier.Infrastructure"); // ✅ fondamentale
+                });
             });
-
-            // Applica migrazioni
-            var sp = services.BuildServiceProvider();
-            using var scope = sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<IdentifierDbContext>();
-            db.Database.Migrate();
         });
     }
 
@@ -70,13 +67,10 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         var host = base.CreateHost(builder);
 
         using var scope = host.Services.CreateScope();
-
         var db = scope.ServiceProvider.GetRequiredService<IdentifierDbContext>();
 
-        // 1) Crea schema/tabelle
-        db.Database.Migrate(); // oppure await MigrateAsync()
+        db.Database.Migrate();
 
-        // 2) Seed dopo che le tabelle esistono
         var seeder = scope.ServiceProvider.GetRequiredService<IdentifierSeeder>();
         seeder.SeedAsync(CancellationToken.None).GetAwaiter().GetResult();
 

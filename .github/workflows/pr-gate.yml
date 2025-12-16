@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: timescale/timescaledb:2.14.0-pg16
+        image: timescale/timescaledb:2.22.1-pg16
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
@@ -85,6 +85,25 @@ jobs:
     name: DotNet Tests and Audit
     runs-on: ubuntu-latest
     needs: [ci]
+    services:
+      postgres:
+        image: timescale/timescaledb:2.22.1-pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: momentum_test
+          POSTGRES_USER: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ASPNETCORE_ENVIRONMENT: Test
+      DOTNET_ENVIRONMENT: Test
+      ConnectionStrings__Identifier: Host=localhost;Port=5432;Database=momentum_identifier_test;Username=postgres;Password=postgres
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4

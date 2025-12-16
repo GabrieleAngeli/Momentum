@@ -31,12 +31,13 @@ services.Configure<IdentifierAuthorizationOptions>(configuration.GetSection("Ide
 
 services.AddDbContext<IdentifierDbContext>(options =>
 {
-    var connectionString = configuration.GetConnectionString("Identifier");
-    if (!string.IsNullOrWhiteSpace(connectionString))
+    var cs = configuration.GetConnectionString("Identifier");
+    if (!string.IsNullOrWhiteSpace(cs))
     {
-        options.UseNpgsql(connectionString, npgsqlOptions =>
+        options.UseNpgsql(cs, npgsql =>
         {
-            npgsqlOptions.EnableRetryOnFailure();
+            npgsql.EnableRetryOnFailure();
+            npgsql.MigrationsAssembly("Identifier.Infrastructure"); // ✅
         });
     }
     else
