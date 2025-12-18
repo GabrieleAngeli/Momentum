@@ -43,7 +43,7 @@
   "mounts": [
     {
       "type": "bind",
-      "source": "${localEnv:HOME}/.aspnet/https",
+      "source": "${localEnv:HOME}\\.aspnet\\https",
       "target": "/home/vscode/.aspnet/https"
     },
     {
