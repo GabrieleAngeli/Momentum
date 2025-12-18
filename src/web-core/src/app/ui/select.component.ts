@@ -1,3 +1,4 @@
+import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -9,7 +10,7 @@ export interface UiSelectOption {
 @Component({
   selector: 'app-ui-select',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CommonModule],
   template: `
     <label class="ui-field">
       <span *ngIf="label">{{ label }}</span>

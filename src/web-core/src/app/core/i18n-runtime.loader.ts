@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { TranslateLoader } from '@ngx-translate/core';
+import { TranslateLoader, TranslationObject } from '@ngx-translate/core';
 import { Observable, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import type { I18nResourceDto } from '@core/types';
@@ -19,18 +19,23 @@ export class RuntimeTranslateLoader implements TranslateLoader {
     });
   }
 
-  getTranslation(lang: string, namespace = 'common'): Observable<Record<string, unknown>> {
+  getTranslation(lang: string, namespace = 'common'): Observable<TranslationObject> {
     const key = this.key(lang, namespace);
-    if (this.cache.has(key)) {
-      return of(this.cache.get(key)!);
+
+    const cached = this.cache.get(key);
+    if (cached) {
+      return of(cached as TranslationObject);
     }
 
     return this.http
       .get<I18nResourceDto>(`/api/i18n?lang=${encodeURIComponent(lang)}&ns=${encodeURIComponent(namespace)}`)
-      .pipe(map(res => {
-        this.cache.set(key, res.resources);
-        return res.resources;
-      }));
+      .pipe(
+        map(res => {
+          const resources = res.resources as unknown as TranslationObject;
+          this.cache.set(key, resources);
+          return resources;
+        })
+      );
   }
 
   private key(lang: string, namespace: string): string {

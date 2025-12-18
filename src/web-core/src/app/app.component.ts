@@ -4,8 +4,6 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from './core/auth.service';
 import { MenuService } from './core/menu.service';
-import { IfPermissionDirective } from './core/if-permission.directive';
-import { IfFlagDirective } from './core/if-flag.directive';
 import { UiButtonComponent } from './ui/button.component';
 import { AsyncPipe } from '@angular/common';
 
@@ -19,8 +17,6 @@ import { AsyncPipe } from '@angular/common';
     RouterLinkActive,
     TranslateModule,
     UiButtonComponent,
-    IfPermissionDirective,
-    IfFlagDirective,
     AsyncPipe
   ],
   template: `
@@ -33,7 +29,7 @@ import { AsyncPipe } from '@angular/common';
           </a>
         </nav>
         <div class="shell__actions">
-          <select class="shell__locale" (change)="changeLocale($event.target.value)">
+          <select class="shell__locale" #locale (change)="changeLocale(locale.value)">
             <option value="en">English</option>
             <option value="it">Italiano</option>
           </select>
