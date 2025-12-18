@@ -72,6 +72,9 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
         db.Database.Migrate();
 
         // DEBUG: ti dice subito se ha migrato davvero
+        var pending = db.Database.GetPendingMigrations().ToList();
+        Console.WriteLine("PENDING: " + string.Join(", ", pending));
+
         var applied = db.Database.GetAppliedMigrations().ToList();
         Console.WriteLine("APPLIED: " + string.Join(", ", applied));
 
