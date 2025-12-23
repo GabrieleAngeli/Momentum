@@ -61,32 +61,29 @@ jobs:
       - name: Restore .NET
         run: dotnet restore ${{ env.SOLUTION }}
 
-      - name: Calculate next version (SemVer from Conventional Commits)
+      - name: Calculate next base version (from last stable)
         id: semver
         shell: bash
         run: |
           set -euo pipefail
 
-          # Prendi l'ultimo tag STABILE (vX.Y.Z)
-          LAST_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1 || true)"
-          if [[ -z "${LAST_TAG}" ]]; then
-            LAST_TAG="v0.1.0"
-          fi
+          LAST_STABLE="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1 || true)"
+          [[ -z "${LAST_STABLE}" ]] && LAST_STABLE="v0.1.0"
 
-          BASE="${LAST_TAG#v}"
+          BASE="${LAST_STABLE#v}"   # X.Y.Z
 
-          # Commit da ultimo tag stabile a HEAD
-          COMMITS="$(git log --pretty=format:%s "${LAST_TAG}..HEAD" || true)"
+          COMMITS="$(git log --pretty=format:%s "${LAST_STABLE}..HEAD" || true)"
 
-          BUMP="patch"
-          if echo "${COMMITS}" | grep -Eqi 'BREAKING CHANGE|!:' ; then
-            BUMP="major"
-          elif echo "${COMMITS}" | grep -Eqi '^feat(\(|:)|^feat!'; then
-            BUMP="minor"
-          elif echo "${COMMITS}" | grep -Eqi '^fix(\(|:)|^perf(\(|:)|^refactor(\(|:)|^fix!|^perf!|^refactor!' ; then
+          BUMP="none"
+          if [[ -n "${COMMITS}" ]]; then
             BUMP="patch"
-          else
-            if [[ -n "${COMMITS}" ]]; then BUMP="patch"; fi
+            if echo "${COMMITS}" | grep -Eqi 'BREAKING CHANGE|!:' ; then
+              BUMP="major"
+            elif echo "${COMMITS}" | grep -Eqi '^feat(\(|:)|^feat!'; then
+              BUMP="minor"
+            elif echo "${COMMITS}" | grep -Eqi '^fix(\(|:)|^perf(\(|:)|^refactor(\(|:)|^fix!|^perf!|^refactor!' ; then
+              BUMP="patch"
+            fi
           fi
 
           IFS='.' read -r MA MI PA <<< "${BASE}"
@@ -94,105 +91,74 @@ jobs:
             major) MA=$((MA+1)); MI=0; PA=0;;
             minor) MI=$((MI+1)); PA=0;;
             patch) PA=$((PA+1));;
+            none)  : ;;
           esac
 
-          NEW_VERSION="${MA}.${MI}.${PA}"
+          NEXT_BASE="${MA}.${MI}.${PA}"
 
-          echo "new_version=${NEW_VERSION}"             >> "$GITHUB_OUTPUT"
-          echo "release_branch=release/v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${NEW_VERSION}"                    >> "$GITHUB_OUTPUT"
-          echo "last_tag=${LAST_TAG}"                   >> "$GITHUB_OUTPUT"
+          echo "last_stable=${LAST_STABLE}"   >> "$GITHUB_OUTPUT"
+          echo "next_base=${NEXT_BASE}"       >> "$GITHUB_OUTPUT"
+          echo "bump=${BUMP}"                 >> "$GITHUB_OUTPUT"
 
-      - name: Determine release channel metadata
+
+      - name: Determine release channel metadata (cycle-based)
         id: release_meta
         shell: bash
         env:
           INPUT_CHANNEL: ${{ env.RELEASE_CHANNEL }}
-          SOURCE_VERSION: ${{ vars.SOURCE_VERSION || steps.semver.outputs.new_version }}
-          DEFAULT_BASE: ${{ steps.semver.outputs.new_version }}
-          BUILD_NUMBER: ${{ env.BUILD_NUMBER || github.run_number }}
-          LAST_TAG: ${{ steps.semver.outputs.last_tag }}
+          NEXT_BASE: ${{ steps.semver.outputs.next_base }}
+          LAST_STABLE: ${{ steps.semver.outputs.last_stable }}
         run: |
           set -euo pipefail
           CHANNEL="${INPUT_CHANNEL:-alpha}"
-          case "${CHANNEL}" in
-            alpha|beta|rc|stable) ;;
-            *) echo "Unsupported RELEASE_CHANNEL '${CHANNEL}'" >&2; exit 1;;
-          esac
+          case "${CHANNEL}" in alpha|beta|rc|stable) ;; *) echo "Bad channel"; exit 1;; esac
 
-          BASE_VERSION="${SOURCE_VERSION:-${DEFAULT_BASE}}"
-          # --- FIX START ---
-          BASE_VERSION="${BASE_VERSION#v}"
-          BASE_VERSION="${BASE_VERSION%%-*}"
-          # --- FIX END ---
+          LAST_STABLE_BASE="${LAST_STABLE#v}"
 
-          if [[ -z "${BASE_VERSION}" ]]; then
-            echo "Missing base version" >&2
-            exit 1
+          # Se esiste un prerelease "attivo" (alpha/beta/rc) e non c'è ancora lo stable di quella base,
+          # continuiamo su quella base (base "pinnata").
+          LATEST_PRE="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-*' --sort=-creatordate \
+            | grep -E '-(alpha|beta|rc)\.' | head -n1 || true)"
+
+          CYCLE_BASE=""
+          if [[ -n "${LATEST_PRE}" ]]; then
+            PRE_BASE="${LATEST_PRE#v}"
+            PRE_BASE="${PRE_BASE%%-*}"     # X.Y.Z
+            if [[ "${PRE_BASE}" != "${LAST_STABLE_BASE}" ]] && ! git rev-parse -q --verify "refs/tags/v${PRE_BASE}" >/dev/null; then
+              CYCLE_BASE="${PRE_BASE}"
+            fi
           fi
 
-          BUILD="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-0}}"
+          BASE_VERSION="${CYCLE_BASE:-${NEXT_BASE}}"
 
+          # Numero prerelease: alpha.0, alpha.1... (per base+canale)
           if [[ "${CHANNEL}" == "stable" ]]; then
             TAG_NAME="v${BASE_VERSION}"
             IS_PRERELEASE="false"
             IS_LATEST="true"
             RELEASE_NAME="🚀 v${BASE_VERSION}"
+            PRE_NUM=""
           else
-            TAG_NAME="v${BASE_VERSION}-${CHANNEL}.${BUILD}"
+            # calcola max N esistente su vBASE-channel.N
+            max=-1
+            while read -r t; do
+              n="${t##*.}"
+              [[ "${n}" =~ ^[0-9]+$ ]] || continue
+              (( n > max )) && max=$n
+            done < <(git tag --list "v${BASE_VERSION}-${CHANNEL}.*" || true)
+            PRE_NUM=$((max+1))
+            TAG_NAME="v${BASE_VERSION}-${CHANNEL}.${PRE_NUM}"
             IS_PRERELEASE="true"
             IS_LATEST="false"
-            RELEASE_NAME="🚀 v${BASE_VERSION}-${CHANNEL}.${BUILD}"
+            RELEASE_NAME="🚀 v${BASE_VERSION}-${CHANNEL}.${PRE_NUM}"
           fi
 
-          REPO="${GITHUB_REPOSITORY}" # owner/name
-          OWNER="${REPO%%/*}"
-          NAME="${REPO#*/}"
-          # Determine the previous tag based on the selected channel
-          latest_tag() {
-            local pattern="$1"
-            local tags=()
-            mapfile -t tags < <(git tag --list "${pattern}" --sort=-version:refname || true)
-            for tag in "${tags[@]}"; do
-              if [[ "${tag}" != "${TAG_NAME}" ]]; then
-                echo "${tag}"
-                return 0
-              fi
-            done
-          }
-
-          PREV_TAG=""
-          case "${CHANNEL}" in
-            stable)
-              PREV_TAG="$(latest_tag 'v[0-9]*.[0-9]*.[0-9]*')"
-              ;;
-            *)
-              pattern="v*-${CHANNEL}.*"
-              PREV_TAG="$(latest_tag "${pattern}")"
-              if [[ -z "${PREV_TAG}" ]]; then
-                PREV_TAG="$(latest_tag 'v[0-9]*.[0-9]*.[0-9]*')"
-              fi
-              ;;
-          esac
-          if [[ -z "${PREV_TAG}" ]]; then
-            PREV_TAG="${LAST_TAG:-v0.1.0}"
-          fi
-
-          COMPARE_URL="https://github.com/${OWNER}/${NAME}/compare/${PREV_TAG}...${TAG_NAME}"
-
-          {
-            echo "release_channel=${CHANNEL}"
-            echo "version_base=${BASE_VERSION}"
-            echo "VERSION_BASE=${BASE_VERSION}"
-            echo "build_num=${BUILD}"
-            echo "BUILD_NUM=${BUILD}"
-            echo "tag_name=${TAG_NAME}"
-            echo "release_name=${RELEASE_NAME}"
-            echo "is_prerelease=${IS_PRERELEASE}"
-            echo "is_latest=${IS_LATEST}"
-            echo "compare_url=${COMPARE_URL}"
-            echo "prev_tag=${PREV_TAG}"
-          } >> "$GITHUB_OUTPUT"
+          echo "version_base=${BASE_VERSION}"   >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}"          >> "$GITHUB_OUTPUT"
+          echo "release_name=${RELEASE_NAME}"  >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRERELEASE}">> "$GITHUB_OUTPUT"
+          echo "is_latest=${IS_LATEST}"        >> "$GITHUB_OUTPUT"
+          echo "pre_num=${PRE_NUM}"            >> "$GITHUB_OUTPUT"
 
       - name: Create / update release branch
         env:
@@ -213,7 +179,7 @@ jobs:
 
       - name: Bump version in solution (best-effort)
         env:
-          VERSION: ${{ steps.semver.outputs.new_version }}
+          VERSION: ${{ steps.release_meta.outputs.version_base }}
         run: |
           set -euo pipefail
           if [[ -f Directory.Build.props ]]; then
