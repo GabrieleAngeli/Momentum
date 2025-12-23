@@ -176,9 +176,17 @@ jobs:
       - name: Audit .NET packages
         if: matrix.language == 'dotnet'
         run: |
-          mkdir -p $REPORT_DIR
-          dotnet list package --vulnerable --include-transitive --format json > $REPORT_DIR/dotnet-packages.json || dotnet list package --vulnerable --include-transitive > $REPORT_DIR/dotnet-packages.txt
+          mkdir -p "$REPORT_DIR"
 
+          # assicura che tutti i project.assets.json siano presenti e aggiornati
+          dotnet restore Momentum.sln
+
+          # audit sulla solution (esplicito)
+          dotnet list Momentum.sln package --vulnerable --include-transitive --format json \
+            > "$REPORT_DIR/dotnet-packages.json" \
+            || dotnet list Momentum.sln package --vulnerable --include-transitive \
+            > "$REPORT_DIR/dotnet-packages.txt"
+            
       - name: Setup Java
         if: startsWith(matrix.language, 'java-')
         uses: actions/setup-java@v4
