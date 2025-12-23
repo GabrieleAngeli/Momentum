@@ -1,0 +1,13 @@
+{
+  "featureA": {
+    "title": "Workspace Feature A",
+    "description": "Modulo remoto di esempio che utilizza i provider condivisi.",
+    "form": {
+      "name": "Nome"
+    },
+    "actions": {
+      "add": "Aggiungi voce"
+    },
+    "flagDisabled": "Questa funzionalità è disabilitata dal flag."
+  }
+}

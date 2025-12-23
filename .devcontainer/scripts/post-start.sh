@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
+sudo chown -R vscode:vscode /workspaces/Momentum 2>/dev/null || true
+sudo chmod -R u+rwX /workspaces/Momentum 2>/dev/null || true
+
 set -euo pipefail
 
-# Ensure the developer user owns the HTTPS development certificates folder if mounted
-if [ -d /home/vscode/.aspnet/https ]; then
-  sudo chown -R vscode:vscode /home/vscode/.aspnet/https || true
+say() { printf '%s\n' "$*"; }
+
+# Ensure the dev user owns the HTTPS cert folder (volume may be root-owned on first start)
+if [ -d "/home/vscode/.aspnet/https" ]; then
+  if command -v sudo >/dev/null 2>&1; then
+    sudo chown -R vscode:vscode /home/vscode/.aspnet/https 2>/dev/null || true
+  fi
+  chmod -R u+rwX /home/vscode/.aspnet/https 2>/dev/null || true
 fi
 
-if [ -d /home/vscode/.aspnet/https-windows ]; then
-  sudo chown -R vscode:vscode /home/vscode/.aspnet/https-windows || true
+# Ensure certs exist after every start (non-blocking)
+if [ -f ".devcontainer/scripts/setup-https-certs.sh" ]; then
+  say "[post-start] setup-https-certs (non-blocking)"
+  bash .devcontainer/scripts/setup-https-certs.sh || true
 fi
 
-# Guarantee HTTPS dev certificates exist after every start
-bash "$(dirname "$0")/setup-https-certs.sh"
-
-# Display quick usage summary
-cat <<'MSG'
-Momentum devcontainer ready.
-- make build       → build backend and frontend
-- make test        → run unit tests
-- npm audit        → audit frontend packages
-- dotnet list ...  → audit backend packages
-MSG

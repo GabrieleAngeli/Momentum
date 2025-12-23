@@ -1,8 +1,12 @@
 .git
 **/bin
 **/obj
-node_modules
-dist
 .vscode
 .DS_Store
 .env
+
+**/node_modules
+**/dist
+**/.angular
+**/.nx
+**/.cache

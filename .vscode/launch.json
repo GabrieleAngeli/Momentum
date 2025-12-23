@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json.schemastore.org/launch", 
+  "$schema": "https://json.schemastore.org/launch",
   "version": "0.2.0",
   "configurations": [
     {
@@ -8,7 +8,13 @@
       "request": "launch",
       "preLaunchTask": "build Momentum AppHost",
       "project": "${workspaceFolder}/src/AppHost/Momentum.AppHost.csproj",
-      "cwd": "${workspaceFolder}/src/AppHost"
+      "program": "${workspaceFolder}/src/AppHost/bin/Debug/net8.0/Momentum.AppHost.dll",
+      "cwd": "${workspaceFolder}/src/AppHost",
+      "args": [],
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DOTNET_LAUNCH_PROFILE": "https"
+      },
     },
     {
       "name": "Momentum web-core (Chrome)",

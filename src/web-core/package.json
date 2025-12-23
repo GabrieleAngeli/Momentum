@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "ng serve",
+    "start": "ng serve --host 0.0.0.0 --port 4200",
+    "start:https": "cross-env-shell \"ng serve --host 0.0.0.0 --port 4200 --ssl true --ssl-cert $HTTPS_CERT_FILE --ssl-key $HTTPS_CERT_KEY_FILE\"",
     "build": "ng build",
     "test": "ng test",
     "lint": "ng lint",
@@ -21,20 +22,20 @@
     "@angular/platform-browser-dynamic": "^19.0.0",
     "@angular/router": "^19.0.0",
     "@microsoft/signalr": "^8.0.0",
+    "@ngx-translate/core": "^17.0.0",
+    "@ngx-translate/http-loader": "^17.0.0",
     "rxjs": "^7.8.1",
     "tslib": "^2.6.2",
-    "web-core": "file:",
     "zone.js": "~0.15.0"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^19.0.0",
     "@angular/cli": "^19.0.0",
     "@angular/compiler-cli": "^19.0.0",
-    "@ngx-translate/core": "^17.0.0",
-    "@ngx-translate/http-loader": "^17.0.0",
+    "@playwright/test": "^1.48.2",
     "@types/jasmine": "~5.1.0",
-    "angular-eslint": "20.4.0",
-    "eslint": "^9.37.0",
+    "angular-eslint": "21.0.1",
+    "eslint": "^9.39.1",
     "jasmine-core": "~5.1.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
@@ -42,6 +43,6 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
     "typescript": "~5.5.0",
-    "typescript-eslint": "8.46.0"
+    "typescript-eslint": "8.46.4"
   }
 }

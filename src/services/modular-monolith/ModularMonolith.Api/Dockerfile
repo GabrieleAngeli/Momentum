@@ -5,6 +5,10 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+
+COPY Directory.Build.props ./
+COPY Directory.Packages.props ./
+
 COPY Momentum.sln ./
 COPY src/services/modular-monolith/ModularMonolith.Domain/ModularMonolith.Domain.csproj src/services/modular-monolith/ModularMonolith.Domain/
 COPY src/services/modular-monolith/ModularMonolith.Application/ModularMonolith.Application.csproj src/services/modular-monolith/ModularMonolith.Application/

@@ -5,6 +5,10 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+
+COPY Directory.Build.props ./
+COPY Directory.Packages.props ./
+
 COPY Momentum.sln ./
 COPY src/services/identifier/Identifier.Domain/Identifier.Domain.csproj src/services/identifier/Identifier.Domain/
 COPY src/services/identifier/Identifier.Application/Identifier.Application.csproj src/services/identifier/Identifier.Application/

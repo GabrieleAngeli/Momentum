@@ -16,10 +16,11 @@
     <AspireComunityVersion>9.8.0</AspireComunityVersion>
     <AspNetCoreVersion>8.0.20</AspNetCoreVersion>
     <DotNetExtensionsVersion>9.0.4</DotNetExtensionsVersion>
+    <EntityFrameworkCoreVersion>8.0.22</EntityFrameworkCoreVersion>
     <OpenTelemetryVersion>1.11.2</OpenTelemetryVersion>
     <OpenTelemetryVersionRev>1.12.0</OpenTelemetryVersionRev>
     <OpenFeatureVersion>2.8.1</OpenFeatureVersion>
-    <TestContainersVersion>4.4.0</TestContainersVersion>
+    <TestContainersVersion>4.9.0</TestContainersVersion>
     <MEAIVersion>9.5.0</MEAIVersion>
     <IsPackable>false</IsPackable>
 

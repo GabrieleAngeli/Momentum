@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions"  />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory"  />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Moq"  />
+    <PackageReference Include="xunit"  />
+    <PackageReference Include="xunit.runner.visualstudio"  />
+    <PackageReference Include="coverlet.collector" >
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/services/identifier/Identifier.Application/Identifier.Application.csproj" />
+    <ProjectReference Include="../../../src/services/identifier/Identifier.Infrastructure/Identifier.Infrastructure.csproj" />
+    <ProjectReference Include="../../../src/services/identifier/Identifier.Domain/Identifier.Domain.csproj" />
+  </ItemGroup>
+</Project>

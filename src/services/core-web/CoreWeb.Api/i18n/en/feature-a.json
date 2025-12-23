@@ -1,0 +1,13 @@
+{
+  "featureA": {
+    "title": "Feature A workspace",
+    "description": "Demonstration remote module consuming shared providers.",
+    "form": {
+      "name": "Name"
+    },
+    "actions": {
+      "add": "Add entry"
+    },
+    "flagDisabled": "This feature is disabled by flag."
+  }
+}

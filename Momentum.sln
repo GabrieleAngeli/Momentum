@@ -4,6 +4,10 @@ VisualStudioVersion = 17.8.34330.188
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Momentum.AppHost", "src\AppHost\Momentum.AppHost.csproj", "{6B5E0DB2-0444-4D4D-BB40-4C2D1DB038AC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Types", "src\shared\Core.Types\Core.Types.csproj", "{EE3B63C3-DCE5-4A71-B45E-6A3282164A44}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoreWeb.Api", "src\services\core-web\CoreWeb.Api\CoreWeb.Api.csproj", "{5FA08A02-5EE1-4D8A-83BF-1AF980C25BCE}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identifier.Domain", "src\services\identifier\Identifier.Domain\Identifier.Domain.csproj", "{29A7427A-7072-4701-A68C-05E553F1E386}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identifier.Application", "src\services\identifier\Identifier.Application\Identifier.Application.csproj", "{8F602048-12DD-4189-8C0E-CE65E6DA0C44}"
@@ -44,11 +48,17 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModularMonolith.Infrastruct
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModularMonolith.Api", "src\services\modular-monolith\ModularMonolith.Api\ModularMonolith.Api.csproj", "{CF457BE7-A389-4A05-8A66-96BE599AB7D4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoreWeb.Api.Tests", "tests\CoreWeb\CoreWeb.Api.Tests\CoreWeb.Api.Tests.csproj", "{BC875584-AF3B-4255-8600-1157D045C957}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModularMonolith.Application.Tests", "tests\ModularMonolith\ModularMonolith.Application.Tests\ModularMonolith.Application.Tests.csproj", "{49C6ADA0-9B10-4CF4-B833-472CC087767A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Streamer.Application.Tests", "tests\Streamer\Streamer.Application.Tests\Streamer.Application.Tests.csproj", "{6F9FA50F-9BFA-4BAE-A908-4E822773494F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notifier.Api.Integration", "tests\Notifier\Notifier.Api.Integration\Notifier.Api.Integration.csproj", "{FAD912A8-3ED0-44AB-A937-B58BA845CBE1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identifier.Application.Tests", "tests\Identifier\Identifier.Application.Tests\Identifier.Application.Tests.csproj", "{E16112D0-602F-4FF9-8961-B3A979401BCA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Identifier.Api.IntegrationTests", "tests\Identifier\Identifier.Api.IntegrationTests\Identifier.Api.IntegrationTests.csproj", "{CE45834E-04BB-43A9-96D5-EEA95533FB7C}"
 EndProject
 Global
 GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,6 +66,18 @@ Debug|Any CPU = Debug|Any CPU
 Release|Any CPU = Release|Any CPU
 EndGlobalSection
 GlobalSection(ProjectConfigurationPlatforms) = postSolution
+{EE3B63C3-DCE5-4A71-B45E-6A3282164A44}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+{EE3B63C3-DCE5-4A71-B45E-6A3282164A44}.Debug|Any CPU.Build.0 = Debug|Any CPU
+{EE3B63C3-DCE5-4A71-B45E-6A3282164A44}.Release|Any CPU.ActiveCfg = Release|Any CPU
+{EE3B63C3-DCE5-4A71-B45E-6A3282164A44}.Release|Any CPU.Build.0 = Release|Any CPU
+{5FA08A02-5EE1-4D8A-83BF-1AF980C25BCE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+{5FA08A02-5EE1-4D8A-83BF-1AF980C25BCE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+{5FA08A02-5EE1-4D8A-83BF-1AF980C25BCE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+{5FA08A02-5EE1-4D8A-83BF-1AF980C25BCE}.Release|Any CPU.Build.0 = Release|Any CPU
+{BC875584-AF3B-4255-8600-1157D045C957}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+{BC875584-AF3B-4255-8600-1157D045C957}.Debug|Any CPU.Build.0 = Debug|Any CPU
+{BC875584-AF3B-4255-8600-1157D045C957}.Release|Any CPU.ActiveCfg = Release|Any CPU
+{BC875584-AF3B-4255-8600-1157D045C957}.Release|Any CPU.Build.0 = Release|Any CPU
 {6B5E0DB2-0444-4D4D-BB40-4C2D1DB038AC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 {6B5E0DB2-0444-4D4D-BB40-4C2D1DB038AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 {6B5E0DB2-0444-4D4D-BB40-4C2D1DB038AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -152,6 +174,14 @@ GlobalSection(ProjectConfigurationPlatforms) = postSolution
 {FAD912A8-3ED0-44AB-A937-B58BA845CBE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 {FAD912A8-3ED0-44AB-A937-B58BA845CBE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 {FAD912A8-3ED0-44AB-A937-B58BA845CBE1}.Release|Any CPU.Build.0 = Release|Any CPU
+{E16112D0-602F-4FF9-8961-B3A979401BCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+{E16112D0-602F-4FF9-8961-B3A979401BCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+{E16112D0-602F-4FF9-8961-B3A979401BCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+{E16112D0-602F-4FF9-8961-B3A979401BCA}.Release|Any CPU.Build.0 = Release|Any CPU
+{CE45834E-04BB-43A9-96D5-EEA95533FB7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+{CE45834E-04BB-43A9-96D5-EEA95533FB7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+{CE45834E-04BB-43A9-96D5-EEA95533FB7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+{CE45834E-04BB-43A9-96D5-EEA95533FB7C}.Release|Any CPU.Build.0 = Release|Any CPU
 EndGlobalSection
 GlobalSection(SolutionProperties) = preSolution
 HideSolutionNode = FALSE
