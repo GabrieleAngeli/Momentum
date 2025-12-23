@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+sudo chown -R vscode:vscode /workspaces/Momentum 2>/dev/null || true
+sudo chmod -R u+rwX /workspaces/Momentum 2>/dev/null || true
+
 set -euo pipefail
 
 say() { printf '%s\n' "$*"; }
@@ -16,3 +19,4 @@ if [ -f ".devcontainer/scripts/setup-https-certs.sh" ]; then
   say "[post-start] setup-https-certs (non-blocking)"
   bash .devcontainer/scripts/setup-https-certs.sh || true
 fi
+
