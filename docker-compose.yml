@@ -56,7 +56,7 @@ services:
   tempo:
     image: grafana/tempo:2.4.0
     volumes:
-      - ./src/AppHost/mounts/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - ./src/AppHost/mounts/tempo/tempo.yaml:/etc/tempo/tempo.yml:ro
       - ./src/AppHost/mounts/tempo/data:/etc/tempo/data
     ports:
       - "13200:3200"

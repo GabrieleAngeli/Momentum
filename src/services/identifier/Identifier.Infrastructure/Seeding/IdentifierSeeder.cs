@@ -242,6 +242,9 @@ public class IdentifierSeeder
             _dbContext.GroupRoles.Add(new GroupRole { GroupId = groupId, RoleId = adminRoleId });
         }
 
+        var validFromUtc = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(-30), TimeSpan.Zero);
+        var validToUtc   = new DateTimeOffset(DateTime.UtcNow.Date.AddYears(1),  TimeSpan.Zero);
+
         var license = await _dbContext.Licenses.FirstOrDefaultAsync(l => l.Id == licenseId, cancellationToken);
         if (license is null)
         {
@@ -249,8 +252,8 @@ public class IdentifierSeeder
             {
                 Id = licenseId,
                 OrganizationId = orgId,
-                ValidFrom = DateTimeOffset.UtcNow.Date.AddDays(-30),
-                ValidTo = DateTimeOffset.UtcNow.Date.AddYears(1),
+                ValidFrom = validFromUtc,
+                ValidTo = validToUtc,
                 Tier = "enterprise"
             };
             _dbContext.Licenses.Add(license);
@@ -258,8 +261,8 @@ public class IdentifierSeeder
         else
         {
             license.OrganizationId = orgId;
-            license.ValidFrom = DateTimeOffset.UtcNow.Date.AddDays(-30);
-            license.ValidTo = DateTimeOffset.UtcNow.Date.AddYears(1);
+            license.ValidFrom = validFromUtc;
+            license.ValidTo = validToUtc;
             license.Tier = "enterprise";
         }
 

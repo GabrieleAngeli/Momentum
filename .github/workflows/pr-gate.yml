@@ -102,7 +102,7 @@ jobs:
     env:
       ASPNETCORE_ENVIRONMENT: Test
       DOTNET_ENVIRONMENT: Test
-      ConnectionStrings__Identifier: Host=localhost;Port=5432;Database=momentum_identifier_test;Username=postgres;Password=postgres
+      ConnectionStrings__Identifier: Host=localhost;Port=5432;Database=momentum_test;Username=postgres;Password=postgres
 
     steps:
       - name: Checkout

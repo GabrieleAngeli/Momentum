@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "ng serve",
+    "start": "ng serve --host 0.0.0.0 --port 4200",
+    "start:https": "cross-env-shell \"ng serve --host 0.0.0.0 --port 4200 --ssl true --ssl-cert $HTTPS_CERT_FILE --ssl-key $HTTPS_CERT_KEY_FILE\"",
     "build": "ng build",
     "test": "ng test",
     "lint": "ng lint",

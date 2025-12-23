@@ -183,7 +183,8 @@ public static class DevCertHostingExtensions
     //     }
     // }
 
-    private static async Task<(bool, string CertFilePath, string CertKeyFilPath)> TryExportDevCertificateAsync(IDistributedApplicationBuilder builder, ILogger logger)
+    private static async Task<(bool, string CertFilePath, string CertKeyFilPath)>
+TryExportDevCertificateAsync(IDistributedApplicationBuilder builder, ILogger logger)
     {
         var appNameHash = builder.Configuration["AppHost:Sha256"]![..10];
         var tempDir = Path.Combine(Path.GetTempPath(), $"aspire.{appNameHash}");
@@ -193,13 +194,13 @@ public static class DevCertHostingExtensions
         var certPemPath = Path.Combine(tempDir, "dev-cert.pem");
         var keyPemPath = Path.Combine(tempDir, "dev-cert.key");
 
-        // Se esistono già, riusa
+        // Riusa se già esistono
         if (File.Exists(certPemPath) && File.Exists(keyPemPath))
             return (true, certPemPath, keyPemPath);
 
-        // 1) Export PFX (include private key)
-        var password = "momentum-dev"; // oppure prendila da config/secret
-        await RunProcess(builder, logger, "dotnet", new[]
+        // Esporta PFX sempre (dotnet dev-certs c’è se stai eseguendo dotnet)
+        var password = "momentum-dev";
+        await RunProcessSafe(logger, "dotnet", new[]
         {
             "dev-certs", "https",
             "--export-path", pfxPath,
@@ -209,8 +210,17 @@ public static class DevCertHostingExtensions
         if (!File.Exists(pfxPath))
             return default;
 
-        // 2) Extract CERT (public) to PEM
-        await RunProcess(builder, logger, "openssl", new[]
+        // Se non ho openssl (tipico su Windows host), NON crashare: fallback
+        if (!ToolExists("openssl"))
+        {
+            logger.LogWarning("openssl not found. Skipping PEM/KEY extraction. " +
+                              "Run AppHost inside devcontainer (recommended) or install OpenSSL on host. " +
+                              "Angular HTTPS will be disabled unless cert/key are provided.");
+            return default; // niente env var per Angular
+        }
+
+        // Estraggo PEM + KEY
+        await RunProcessSafe(logger, "openssl", new[]
         {
             "pkcs12", "-in", pfxPath,
             "-clcerts", "-nokeys",
@@ -218,8 +228,7 @@ public static class DevCertHostingExtensions
             "-out", certPemPath
         }, timeoutSeconds: 30);
 
-        // 3) Extract KEY (private) to PEM, NOT encrypted (-nodes)
-        await RunProcess(builder, logger, "openssl", new[]
+        await RunProcessSafe(logger, "openssl", new[]
         {
             "pkcs12", "-in", pfxPath,
             "-nocerts", "-nodes",
@@ -233,46 +242,85 @@ public static class DevCertHostingExtensions
         return default;
     }
 
-    private static async Task RunProcess(
-        IDistributedApplicationBuilder builder,
-        ILogger logger,
-        string fileName,
-        IEnumerable<string> args,
-        int timeoutSeconds)
+
+    private static async Task<bool> RunProcessSafe(
+    ILogger logger,
+    string fileName,
+    IEnumerable<string> args,
+    int timeoutSeconds)
     {
-        var psi = new ProcessStartInfo
+        try
         {
-            FileName = fileName,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
 
-        foreach (var a in args)
-            psi.ArgumentList.Add(a);
+            foreach (var a in args) psi.ArgumentList.Add(a);
 
-        logger.LogTrace("Running: {File} {Args}", fileName, string.Join(' ', args));
+            logger.LogTrace("Running: {File} {Args}", fileName, string.Join(' ', args));
 
-        using var p = Process.Start(psi);
-        if (p is null) throw new InvalidOperationException($"Cannot start {fileName}");
+            using var p = Process.Start(psi);
+            if (p is null) return false;
 
-        var stdout = p.StandardOutput.ReadToEndAsync();
-        var stderr = p.StandardError.ReadToEndAsync();
+            var stdout = p.StandardOutput.ReadToEndAsync();
+            var stderr = p.StandardError.ReadToEndAsync();
 
-        if (await Task.WhenAny(Task.Run(() => p.WaitForExit(timeoutSeconds * 1000)), Task.Delay(timeoutSeconds * 1000)) != null
-            && p.HasExited && p.ExitCode == 0)
-        {
+            var exited = await Task.Run(() => p.WaitForExit(timeoutSeconds * 1000));
+            if (!exited)
+            {
+                try { p.Kill(true); } catch { }
+                logger.LogWarning("{File} timed out.", fileName);
+                return false;
+            }
+
             var o = await stdout;
-            if (!string.IsNullOrWhiteSpace(o)) logger.LogInformation("> {Out}", o);
             var e = await stderr;
-            if (!string.IsNullOrWhiteSpace(e)) logger.LogWarning("! {Err}", e);
-            return;
-        }
 
-        try { if (!p.HasExited) p.Kill(true); } catch { }
-        var err = await stderr;
-        logger.LogError("Process failed: {File} exit={Code} err={Err}", fileName, p.ExitCode, err);
-        throw new InvalidOperationException($"{fileName} failed");
+            if (!string.IsNullOrWhiteSpace(o)) logger.LogDebug("> {Out}", o);
+            if (!string.IsNullOrWhiteSpace(e)) logger.LogDebug("! {Err}", e);
+
+            return p.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to run process {File}", fileName);
+            return false;
+        }
+    }
+
+
+    private static bool ToolExists(string toolName)
+    {
+        // Windows: where, Linux/mac: which
+        var isWin = OperatingSystem.IsWindows();
+        var finder = isWin ? "where" : "which";
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = finder,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add(toolName);
+
+            using var p = Process.Start(psi);
+            if (p is null) return false;
+
+            p.WaitForExit(2000);
+            return p.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

@@ -32,18 +32,18 @@ services.Configure<IdentifierAuthorizationOptions>(configuration.GetSection("Ide
 services.AddDbContext<IdentifierDbContext>(options =>
 {
     var cs = configuration.GetConnectionString("Identifier");
-    if (!string.IsNullOrWhiteSpace(cs))
-    {
+    //if (!string.IsNullOrWhiteSpace(cs))
+    //{
         options.UseNpgsql(cs, npgsql =>
         {
             npgsql.EnableRetryOnFailure();
             npgsql.MigrationsAssembly("Identifier.Infrastructure"); // ✅
         });
-    }
-    else
-    {
-        options.UseInMemoryDatabase("identifier");
-    }
+    //}
+    //else
+   // {
+    //    options.UseInMemoryDatabase("identifier");
+    //}
 });
 
 services.AddMemoryCache();

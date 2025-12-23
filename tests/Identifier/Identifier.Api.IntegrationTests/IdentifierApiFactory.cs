@@ -20,11 +20,11 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     public IdentifierApiFactory()
     {
         _timescaleContainer = new PostgreSqlBuilder()
-            .WithDatabase("identifier")
+            .WithDatabase("momentum_test")
             .WithUsername("postgres")
             .WithPassword("postgres")
             //TODO fix on configuration
-            .WithImage("timescale/timescaledb-ha:pg15.5-ts2.13.1")
+            .WithImage("timescale/timescaledb:2.22.1-pg16")
             .Build();
     }
 
@@ -48,6 +48,8 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
     {
         builder.UseEnvironment("Test");
 
+
+
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<IdentifierDbContext>>();
@@ -56,7 +58,7 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
             {
                 options.UseNpgsql(_timescaleContainer.GetConnectionString(), npgsql =>
                 {
-                    npgsql.MigrationsAssembly(typeof(Identifier.Infrastructure.Migrations.Add_Identifier_Schema).Assembly.GetName().Name);
+                    npgsql.MigrationsAssembly(typeof(Identifier.Infrastructure.Migrations.InitialIdentifierSchema).Assembly.GetName().Name);
                 });
             });
         });
@@ -68,6 +70,8 @@ public class IdentifierApiFactory : WebApplicationFactory<Program>, IAsyncLifeti
 
         using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<IdentifierDbContext>();
+
+        Console.WriteLine("IDENTIFIER_CS: " + db.Database.GetConnectionString());
 
         db.Database.Migrate();
 
