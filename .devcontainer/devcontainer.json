@@ -21,7 +21,17 @@
   "remoteUser": "vscode",
   "containerEnv": {
     "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
-    "DOTNET_NOLOGO": "1"
+    "DOTNET_NOLOGO": "1",
+
+    "CERT_NAME": "momentum-dev-cert",
+    "CERT_PASSWORD": "momentum-dev",
+
+    "HTTPS_CERT_FILE": "/home/vscode/.aspnet/https/momentum-dev-cert.crt",
+    "HTTPS_CERT_KEY_FILE": "/home/vscode/.aspnet/https/momentum-dev-cert.key"
+
+    // opzionale per backend Kestrel
+    // "ASPNETCORE_Kestrel__Certificates__Default__Path": "/home/vscode/.aspnet/https/momentum-dev-cert.pfx",
+    // "ASPNETCORE_Kestrel__Certificates__Default__Password": "momentum-dev"
   },
   "forwardPorts": [4200, 5000, 5001, 9090],
   "portsAttributes": {
@@ -41,16 +51,7 @@
   "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
   "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
   "mounts": [
-    {
-      "type": "bind",
-      "source": "${localEnv:HOME}\\.aspnet\\https",
-      "target": "/home/vscode/.aspnet/https"
-    },
-    {
-      "type": "bind",
-      "source": "${localEnv:USERPROFILE}\\.aspnet\\https",
-      "target": "/home/vscode/.aspnet/https-windows"
-    }
+    "type=volume,source=momentum-aspnet-https,target=/home/vscode/.aspnet/https"
   ],
   "customizations": {
     "vscode": {

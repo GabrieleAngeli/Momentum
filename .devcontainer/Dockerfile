@@ -2,6 +2,10 @@
 ARG VARIANT="8.0-bookworm-slim"
 FROM mcr.microsoft.com/devcontainers/dotnet:${VARIANT}
 
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 # Install base tooling required across development, build, test and security scan stages
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

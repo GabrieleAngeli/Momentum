@@ -39,24 +39,30 @@ services:
   prometheus:
     image: prom/prometheus:v2.49.0
     volumes:
-      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./src/AppHost/mounts/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
 
   grafana:
     image: grafana/grafana-oss:10.4.0
     ports:
-      - "3000:3000"
+      - "13000:3000"
 
   loki:
     image: grafana/loki:3.0.0
     ports:
-      - "3100:3100"
+      - "13100:3100"
 
   tempo:
     image: grafana/tempo:2.4.0
+    volumes:
+      - ./src/AppHost/mounts/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - ./src/AppHost/mounts/tempo/data:/etc/tempo/data
     ports:
-      - "3200:3200"
+      - "13200:3200"
+      - "4317:4317"   # OTLP gRPC (opzionale ma utile)
+      - "4318:4318"   # OTLP HTTP (opzionale)
+
 
   identifier-api:
     build:

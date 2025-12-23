@@ -5,6 +5,9 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+COPY Directory.Build.props ./
+COPY Directory.Packages.props ./
+
 COPY Momentum.sln ./
 COPY src/services/streamer/Streamer.Domain/Streamer.Domain.csproj src/services/streamer/Streamer.Domain/
 COPY src/services/streamer/Streamer.Application/Streamer.Application.csproj src/services/streamer/Streamer.Application/

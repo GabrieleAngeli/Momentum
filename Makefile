@@ -5,14 +5,14 @@ dev: build
 
 build:
 	dotnet build Momentum.sln || true
-	npm install --prefix src/web-core
+	npm ci --prefix src/web-core
 	npm run build --prefix src/web-core || true
 
 backend:
 	dotnet build Momentum.sln || true
 
 frontend:
-	npm install --prefix src/web-core
+	npm ci --prefix src/web-core
 	npm start --prefix src/web-core
 
 contracts:

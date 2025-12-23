@@ -71,115 +71,208 @@ public static class DevCertHostingExtensions
         return builder;
     }
 
+    // private static async Task<(bool, string CertFilePath, string CertKeyFilPath)> TryExportDevCertificateAsync(IDistributedApplicationBuilder builder, ILogger logger)
+    // {
+    //     // Exports the ASP.NET Core HTTPS development certificate & private key to PEM files using 'dotnet dev-certs https' to a temporary
+    //     // directory and returns the path.
+    //     // TODO: Check if we're running on a platform that already has the cert and key exported to a file (e.g. macOS) and just use those instead.
+    //     var appNameHash = builder.Configuration["AppHost:Sha256"]![..10];
+    //     var tempDir = Path.Combine(Path.GetTempPath(), $"aspire.{appNameHash}");
+    //     var certExportPath = Path.Combine(tempDir, "dev-cert.pem");
+    //     var certKeyExportPath = Path.Combine(tempDir, "dev-cert.key");
+
+    //     if (File.Exists(certExportPath) && File.Exists(certKeyExportPath))
+    //     {
+    //         // Certificate already exported, return the path.
+    //         logger.LogDebug("Using previously exported dev cert files '{CertPath}' and '{CertKeyPath}'", certExportPath, certKeyExportPath);
+    //         return (true, certExportPath, certKeyExportPath);
+    //     }
+
+    //     if (File.Exists(certExportPath))
+    //     {
+    //         logger.LogTrace("Deleting previously exported dev cert file '{CertPath}'", certExportPath);
+    //         File.Delete(certExportPath);
+    //     }
+
+    //     if (File.Exists(certKeyExportPath))
+    //     {
+    //         logger.LogTrace("Deleting previously exported dev cert key file '{CertKeyPath}'", certKeyExportPath);
+    //         File.Delete(certKeyExportPath);
+    //     }
+
+    //     if (!Directory.Exists(tempDir))
+    //     {
+    //         logger.LogTrace("Creating directory to export dev cert to '{ExportDir}'", tempDir);
+    //         Directory.CreateDirectory(tempDir);
+    //     }
+
+    //     string[] args = ["dev-certs", "https", "--export-path", $"\"{certExportPath}\"", "--format", "Pem", "--no-password"];
+    //     var argsString = string.Join(' ', args);
+
+    //     logger.LogTrace("Running command to export dev cert: {ExportCmd}", $"dotnet {argsString}");
+    //     var exportStartInfo = new ProcessStartInfo
+    //     {
+    //         FileName = "dotnet",
+    //         Arguments = argsString,
+    //         RedirectStandardOutput = true,
+    //         RedirectStandardError = true,
+    //         UseShellExecute = false,
+    //         CreateNoWindow = true,
+    //         WindowStyle = ProcessWindowStyle.Hidden,
+    //     };
+
+    //     var exportProcess = new Process { StartInfo = exportStartInfo };
+
+    //     Task? stdOutTask = null;
+    //     Task? stdErrTask = null;
+
+    //     try
+    //     {
+    //         try
+    //         {
+    //             if (exportProcess.Start())
+    //             {
+    //                 stdOutTask = ConsumeOutput(exportProcess.StandardOutput, msg => logger.LogInformation("> {StandardOutput}", msg));
+    //                 stdErrTask = ConsumeOutput(exportProcess.StandardError, msg => logger.LogError("! {ErrorOutput}", msg));
+    //             }
+    //         }
+    //         catch (Exception ex)
+    //         {
+    //             logger.LogError(ex, "Failed to start HTTPS dev certificate export process");
+    //             return default;
+    //         }
+
+    //         var timeout = TimeSpan.FromSeconds(5);
+    //         var exited = exportProcess.WaitForExit(timeout);
+
+    //         if (exited && File.Exists(certExportPath) && File.Exists(certKeyExportPath))
+    //         {
+    //             logger.LogDebug("Dev cert exported to '{CertPath}' and '{CertKeyPath}'", certExportPath, certKeyExportPath);
+    //             return (true, certExportPath, certKeyExportPath);
+    //         }
+
+    //         if (exportProcess.HasExited && exportProcess.ExitCode != 0)
+    //         {
+    //             logger.LogError("HTTPS dev certificate export failed with exit code {ExitCode}", exportProcess.ExitCode);
+    //         }
+    //         else if (!exportProcess.HasExited)
+    //         {
+    //             exportProcess.Kill(true);
+    //             logger.LogError("HTTPS dev certificate export timed out after {TimeoutSeconds} seconds", timeout.TotalSeconds);
+    //         }
+    //         else
+    //         {
+    //             logger.LogError("HTTPS dev certificate export failed for an unknown reason");
+    //         }
+    //         return default;
+    //     }
+    //     finally
+    //     {
+    //         await Task.WhenAll(stdOutTask ?? Task.CompletedTask, stdErrTask ?? Task.CompletedTask);
+    //     }
+
+    //     static async Task ConsumeOutput(TextReader reader, Action<string> callback)
+    //     {
+    //         char[] buffer = new char[256];
+    //         int charsRead;
+
+    //         while ((charsRead = await reader.ReadAsync(buffer, 0, buffer.Length)) > 0)
+    //         {
+    //             callback(new string(buffer, 0, charsRead));
+    //         }
+    //     }
+    // }
+
     private static async Task<(bool, string CertFilePath, string CertKeyFilPath)> TryExportDevCertificateAsync(IDistributedApplicationBuilder builder, ILogger logger)
     {
-        // Exports the ASP.NET Core HTTPS development certificate & private key to PEM files using 'dotnet dev-certs https' to a temporary
-        // directory and returns the path.
-        // TODO: Check if we're running on a platform that already has the cert and key exported to a file (e.g. macOS) and just use those instead.
         var appNameHash = builder.Configuration["AppHost:Sha256"]![..10];
         var tempDir = Path.Combine(Path.GetTempPath(), $"aspire.{appNameHash}");
-        var certExportPath = Path.Combine(tempDir, "dev-cert.pem");
-        var certKeyExportPath = Path.Combine(tempDir, "dev-cert.key");
+        Directory.CreateDirectory(tempDir);
 
-        if (File.Exists(certExportPath) && File.Exists(certKeyExportPath))
+        var pfxPath = Path.Combine(tempDir, "dev-cert.pfx");
+        var certPemPath = Path.Combine(tempDir, "dev-cert.pem");
+        var keyPemPath = Path.Combine(tempDir, "dev-cert.key");
+
+        // Se esistono già, riusa
+        if (File.Exists(certPemPath) && File.Exists(keyPemPath))
+            return (true, certPemPath, keyPemPath);
+
+        // 1) Export PFX (include private key)
+        var password = "momentum-dev"; // oppure prendila da config/secret
+        await RunProcess(builder, logger, "dotnet", new[]
         {
-            // Certificate already exported, return the path.
-            logger.LogDebug("Using previously exported dev cert files '{CertPath}' and '{CertKeyPath}'", certExportPath, certKeyExportPath);
-            return (true, certExportPath, certKeyExportPath);
-        }
+            "dev-certs", "https",
+            "--export-path", pfxPath,
+            "--password", password
+        }, timeoutSeconds: 30);
 
-        if (File.Exists(certExportPath))
+        if (!File.Exists(pfxPath))
+            return default;
+
+        // 2) Extract CERT (public) to PEM
+        await RunProcess(builder, logger, "openssl", new[]
         {
-            logger.LogTrace("Deleting previously exported dev cert file '{CertPath}'", certExportPath);
-            File.Delete(certExportPath);
-        }
+            "pkcs12", "-in", pfxPath,
+            "-clcerts", "-nokeys",
+            "-passin", $"pass:{password}",
+            "-out", certPemPath
+        }, timeoutSeconds: 30);
 
-        if (File.Exists(certKeyExportPath))
+        // 3) Extract KEY (private) to PEM, NOT encrypted (-nodes)
+        await RunProcess(builder, logger, "openssl", new[]
         {
-            logger.LogTrace("Deleting previously exported dev cert key file '{CertKeyPath}'", certKeyExportPath);
-            File.Delete(certKeyExportPath);
-        }
+            "pkcs12", "-in", pfxPath,
+            "-nocerts", "-nodes",
+            "-passin", $"pass:{password}",
+            "-out", keyPemPath
+        }, timeoutSeconds: 30);
 
-        if (!Directory.Exists(tempDir))
+        if (File.Exists(certPemPath) && File.Exists(keyPemPath))
+            return (true, certPemPath, keyPemPath);
+
+        return default;
+    }
+
+    private static async Task RunProcess(
+        IDistributedApplicationBuilder builder,
+        ILogger logger,
+        string fileName,
+        IEnumerable<string> args,
+        int timeoutSeconds)
+    {
+        var psi = new ProcessStartInfo
         {
-            logger.LogTrace("Creating directory to export dev cert to '{ExportDir}'", tempDir);
-            Directory.CreateDirectory(tempDir);
-        }
-
-        string[] args = ["dev-certs", "https", "--export-path", $"\"{certExportPath}\"", "--format", "Pem", "--no-password"];
-        var argsString = string.Join(' ', args);
-
-        logger.LogTrace("Running command to export dev cert: {ExportCmd}", $"dotnet {argsString}");
-        var exportStartInfo = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = argsString,
+            FileName = fileName,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
         };
 
-        var exportProcess = new Process { StartInfo = exportStartInfo };
+        foreach (var a in args)
+            psi.ArgumentList.Add(a);
 
-        Task? stdOutTask = null;
-        Task? stdErrTask = null;
+        logger.LogTrace("Running: {File} {Args}", fileName, string.Join(' ', args));
 
-        try
+        using var p = Process.Start(psi);
+        if (p is null) throw new InvalidOperationException($"Cannot start {fileName}");
+
+        var stdout = p.StandardOutput.ReadToEndAsync();
+        var stderr = p.StandardError.ReadToEndAsync();
+
+        if (await Task.WhenAny(Task.Run(() => p.WaitForExit(timeoutSeconds * 1000)), Task.Delay(timeoutSeconds * 1000)) != null
+            && p.HasExited && p.ExitCode == 0)
         {
-            try
-            {
-                if (exportProcess.Start())
-                {
-                    stdOutTask = ConsumeOutput(exportProcess.StandardOutput, msg => logger.LogInformation("> {StandardOutput}", msg));
-                    stdErrTask = ConsumeOutput(exportProcess.StandardError, msg => logger.LogError("! {ErrorOutput}", msg));
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to start HTTPS dev certificate export process");
-                return default;
-            }
-
-            var timeout = TimeSpan.FromSeconds(5);
-            var exited = exportProcess.WaitForExit(timeout);
-
-            if (exited && File.Exists(certExportPath) && File.Exists(certKeyExportPath))
-            {
-                logger.LogDebug("Dev cert exported to '{CertPath}' and '{CertKeyPath}'", certExportPath, certKeyExportPath);
-                return (true, certExportPath, certKeyExportPath);
-            }
-
-            if (exportProcess.HasExited && exportProcess.ExitCode != 0)
-            {
-                logger.LogError("HTTPS dev certificate export failed with exit code {ExitCode}", exportProcess.ExitCode);
-            }
-            else if (!exportProcess.HasExited)
-            {
-                exportProcess.Kill(true);
-                logger.LogError("HTTPS dev certificate export timed out after {TimeoutSeconds} seconds", timeout.TotalSeconds);
-            }
-            else
-            {
-                logger.LogError("HTTPS dev certificate export failed for an unknown reason");
-            }
-            return default;
-        }
-        finally
-        {
-            await Task.WhenAll(stdOutTask ?? Task.CompletedTask, stdErrTask ?? Task.CompletedTask);
+            var o = await stdout;
+            if (!string.IsNullOrWhiteSpace(o)) logger.LogInformation("> {Out}", o);
+            var e = await stderr;
+            if (!string.IsNullOrWhiteSpace(e)) logger.LogWarning("! {Err}", e);
+            return;
         }
 
-        static async Task ConsumeOutput(TextReader reader, Action<string> callback)
-        {
-            char[] buffer = new char[256];
-            int charsRead;
-
-            while ((charsRead = await reader.ReadAsync(buffer, 0, buffer.Length)) > 0)
-            {
-                callback(new string(buffer, 0, charsRead));
-            }
-        }
+        try { if (!p.HasExited) p.Kill(true); } catch { }
+        var err = await stderr;
+        logger.LogError("Process failed: {File} exit={Code} err={Err}", fileName, p.ExitCode, err);
+        throw new InvalidOperationException($"{fileName} failed");
     }
 }

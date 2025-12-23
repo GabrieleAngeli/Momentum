@@ -5,6 +5,9 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
+COPY Directory.Build.props ./
+COPY Directory.Packages.props ./
+
 COPY Momentum.sln ./
 COPY src/services/notifier/Notifier.Domain/Notifier.Domain.csproj src/services/notifier/Notifier.Domain/
 COPY src/services/notifier/Notifier.Application/Notifier.Application.csproj src/services/notifier/Notifier.Application/
