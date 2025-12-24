@@ -186,11 +186,9 @@ jobs:
 
           # dotnet list NON supporta --configuration, usa proprietà MSBuild
           dotnet list Momentum.sln package --vulnerable --include-transitive \
-            -p:Configuration=Release \
             --format json \
             > "$REPORT_DIR/dotnet-packages.json" \
           || dotnet list Momentum.sln package --vulnerable --include-transitive \
-            -p:Configuration=Release \
             > "$REPORT_DIR/dotnet-packages.txt"
 
 
