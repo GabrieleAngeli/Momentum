@@ -2,25 +2,25 @@
 
 ## Coverage pillars
 - **Unit:** xUnit for .NET, Jasmine for Angular.
-- **Integration:** gRPC/HTTP tests with Testcontainers (Kafka, Timescale, Ignite) plus Playwright e2e suites executed in CI.
-- **Contract:** schema verification via `buf`/`spectral` (pipeline step TBD) triggered by `make contracts` and release workflows.
-- **E2E:** Playwright orchestrated against the docker compose profile and Aspire AppHost.
+- **Integration:** Identifier API tests use Testcontainers (Timescale/Postgres). Other services currently rely on unit tests only.
+- **Contract:** JSON schema validation uses `tests/Contracts/schema-validation.test.sh` (AJV in CI). `make contracts` only bundles the contracts directory.
+- **E2E:** Playwright spec under `tests/WebCore/e2e.spec.ts` targets a running `web-core` instance.
 - **Coverage goal:** minimum 70% for critical domains, including modules delivered through the modular monolith façade.
 
 ## Test environments
-- **Local:** `make test` spins up required containers and runs .NET/Angular unit tests. Integration tests rely on Testcontainers to remain hermetic.
-- **CI (pull requests):** Executes unit + integration tests, static analysis, contract validation, and publishes coverage reports.
-- **Nightly:** Full E2E suite against the docker compose topology with seeded sample data (`tools/scripts/generate-sample-data.sh`).
+- **Local:** `make test` runs `dotnet test` and `npm test` (it does not start containers). Integration tests that need databases spin up Testcontainers.
+- **CI (pull requests):** `pr-gate.yml` runs .NET build/test, frontend lint/tests, and JSON schema validation; coverage artefacts are uploaded.
+- **Nightly:** No nightly workflow is defined in `.github/workflows/` at the moment.
 
 ## Quality gates
 - Block merges when tests fail or coverage decreases beyond threshold.
-- Contracts must be regenerated (`make contracts`) and committed when proto/OpenAPI definitions change.
-- New modules require dedicated smoke tests proving integration with the modular monolith façade and web-core module manifest.
+- Contracts should be re-bundled (`make contracts`) and committed when proto/OpenAPI definitions change.
+- New modules should add smoke tests proving integration with the modular monolith façade and web-core module manifest.
 
 ## Tooling matrix
 | Layer | Backend | Frontend |
 | --- | --- | --- |
 | Unit | xUnit + FluentAssertions | Jasmine/Karma |
-| Integration | Testcontainers + Aspire orchestrations | Playwright component tests |
-| Contract | `buf`, `spectral`, JSON schema diff | API client generation smoke tests |
-| E2E | Playwright headless via docker compose | Playwright end-user journeys |
+| Integration | Testcontainers (Timescale/Postgres) | - |
+| Contract | AJV schema validation | - |
+| E2E | Playwright (manual orchestration) | Playwright end-user journeys |

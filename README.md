@@ -6,21 +6,23 @@
 Momentum is a modular and resilient IoT platform that can operate as a modular monolith or evolve into a microservice topology without changing public contracts. The `modular-monolith` service provides the reference implementation for the aggregated runtime, and developers should follow the dedicated [Modular Architecture Guidelines](docs/06-Modular-Architecture-Guidelines.md) when extending it. Additional architectural context is available in the [architecture overview](architecture-overview.md).
 
 ## Stack
-- **Backend:** .NET 8 Aspire with Dapr over gRPC and Kafka pub/sub.
+- **Backend:** .NET 8 with Aspire AppHost for local orchestration and Dapr sidecars (service invocation + pub/sub).
 - **Frontend:** Angular 19 shell with runtime module federation, shared providers (auth, flags, i18n) and a neutral UI kit.
-- **Data:** TimescaleDB for historical storage, Apache Ignite for caching.
-- **Messaging:** Kafka for telemetry events.
-- **Realtime:** SignalR and notification channels.
-- **Observability:** OpenTelemetry exported to Prometheus, Loki, Tempo, Grafana.
-- **Security:** JWT with OpenFeature-ready hooks.
-- **Licensing:** OSS-only dependencies (Docker images `-oss`/Debian and community libraries).
+- **Data:** TimescaleDB for telemetry persistence; Apache Ignite is provisioned for caching (no cache usage is wired in code yet).
+- **Messaging:** Kafka (Redpanda in `docker-compose.yml`) for telemetry events.
+- **Realtime:** SignalR hubs in `web-backend-core` (notifications) and `core-web` (UI shell).
+- **Observability:** OpenTelemetry instrumentation with Prometheus metrics exporters enabled in the .NET services (traces require an OTLP exporter configuration).
+- **Security:** JWT authentication; OpenFeature is configured in `web-backend-core` with an in-memory provider.
+- **Licensing:** OSS-only dependencies (Grafana OSS, Timescale OSS images, community libraries).
 
 ## Quick start
 ```bash
 make build
 make dev
 ```
-Orchestrate the full topology with Aspire:
+`make dev` uses `docker compose` to run infrastructure plus the distributed services (`identifier`, `streamer`, `notifier`, `web-backend-core`) and the `web-core` UI. Dapr sidecars are **not** started in this path.
+
+Orchestrate the full topology with Aspire (includes Dapr sidecars, `core-web`, and the modular monolith):
 ```bash
 dotnet run --project src/AppHost/Momentum.AppHost.csproj
 ```
@@ -29,8 +31,8 @@ dotnet run --project src/AppHost/Momentum.AppHost.csproj
 - **Domain-driven design + Clean Architecture:** Each bounded context follows the `Domain → Application → Infrastructure → Api` layering enforced by solution folder structure and shared build props.
 - **Modular monolith first:** New capabilities should be implemented inside the `modular-monolith` service (or as modules under [`modules/`](modules/)). When extraction to independent services is required, keep the public contracts in sync with the modular façade.
 - **Event-driven integration:** Services communicate through Dapr bindings and Kafka topics; long-running workflows are composed via pub/sub events instead of synchronous chains.
-- **Contract-first evolution:** gRPC, OpenAPI and schema artefacts in [`contracts`](contracts/) are versioned and validated in CI/CD to guarantee compatibility across services and modules.
-- **Infrastructure as code:** Local environments rely on Aspire or `docker compose`, while production-ready manifests are authored in Bicep/Terraform (tracked under `infra/`, TODO).
+- **Contract-first evolution:** gRPC/OpenAPI/schema artefacts in [`contracts`](contracts/) are versioned; JSON schemas are validated in CI (`tests/Contracts/schema-validation.test.sh`), while other contract checks are still to be automated.
+- **Infrastructure as code:** Local environments rely on Aspire or `docker compose`. Production IaC is not yet tracked in this repository (no `infra/` directory).
 
 ### How to extend the platform
 1. Shape the domain model and contracts inside the appropriate module under [`modules/`](modules/) and [`contracts/`](contracts/).
@@ -53,11 +55,13 @@ The repository ships a ready-to-use [Dev Container](https://containers.dev/) con
 | --- | --- |
 | core-web | UI gateway exposing manifest, feature flags, menu, i18n, and auth for micro frontends |
 | identifier | Authentication and license management |
-| streamer | Telemetry ingestion from Kafka → Timescale/Ignite |
+| streamer | Telemetry ingestion from Kafka → Timescale |
 | notifier | Multi-channel notification dispatch |
 | web-backend-core | API gateway + SignalR hub |
 | modular-monolith | Aggregates all backend capabilities via Dapr |
 | web-core | Modular Angular frontend |
+
+> **Note:** `docker-compose.yml` runs `identifier`, `streamer`, `notifier`, `web-backend-core`, and `web-core`. `core-web` and `modular-monolith` are currently wired only in the Aspire AppHost (`src/AppHost`).
 
 ### Modules
 
@@ -65,10 +69,10 @@ The repository ships a ready-to-use [Dev Container](https://containers.dev/) con
 
 ## End-to-end flow
 1. A raw event arrives on `telemetry.input` (Kafka).
-2. The streamer transforms it, persists to Timescale, invalidates Ignite cache, and publishes `telemetry.ingested`.
-3. The notifier subscribes to the event, delivers mail/SignalR via web-backend-core.
+2. The streamer transforms it, persists to Timescale, and publishes `telemetry.ingested` via Dapr/Kafka.
+3. The notifier subscribes to the event and dispatches notifications (SignalR via `web-backend-core`, plus email if configured).
 4. Web-backend-core broadcasts on the SignalR hub.
-5. Web-core receives the realtime notification and updates the dashboard.
+5. Any clients connected to the `web-backend-core` SignalR hub receive the realtime notification (the `web-core` UI currently connects to the `core-web` hub for shell updates).
 
 ## Useful scripts
 - `tools/scripts/generate-sample-data.sh` seeds demo events.

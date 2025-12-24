@@ -1,9 +1,9 @@
 # Security Policy
 
 ## Controls
-- JWT tokens are signed with a rotatable key stored in Key Vault (placeholder implementation).
-- OpenFeature drives feature flags and licensing via a Dapr binding provider.
-- Timescale and Ignite access follows the principle of least privilege.
-- gRPC plus HTTPS are mandatory in production environments.
-- Secrets must never live in the repository; use CI/CD variables instead.
-- Modular monolith deployments inherit the same security controls as the distributed topology to maintain parity across environments.
+- JWT tokens are signed with a configurable key (`Auth:Jwt:SigningKey` in `core-web`), with a development default if no secret is provided.
+- OpenFeature is wired in `web-backend-core` with an in-memory provider; no external flag provider or Dapr binding is configured yet.
+- TimescaleDB credentials are injected via connection strings (environment overrides are supported).
+- gRPC endpoints (Identifier and Streamer) run alongside HTTP; HTTPS is a deployment concern and is not enforced by default in the repo.
+- Secrets must never live in the repository; use environment variables or secret stores in CI/CD.
+- Modular monolith deployments must keep the same auth/flag semantics as the distributed topology to preserve contract parity.
