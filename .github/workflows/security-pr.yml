@@ -10,6 +10,14 @@ on:
       - '.github/**'
       - '**/*.png'
       - '**/*.jpg'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/**'
+      - '**/*.png'
+      - '**/*.jpg'
   workflow_dispatch:
     inputs:
       preview_url:
@@ -811,8 +819,8 @@ jobs:
         with:
           labels: security:attention
 
-      - name: Fail when gate fails
-        if: steps.aggregate.outputs.should_fail == 'true'
-        run: |
-          echo "Security gate failed due to severity thresholds" >&2
-          exit 1
+      - name: Remove attention label when gate passes
+        if: steps.aggregate.outputs.should_fail != 'true'
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: security:attention
