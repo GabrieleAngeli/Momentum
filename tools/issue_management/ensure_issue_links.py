@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Utility per garantire che ogni commit di una pull request sia collegato ad almeno una issue.
+"""Utility to ensure every commit in a pull request is linked to at least one issue.
 
-Il tool può opzionalmente creare automaticamente una issue sintetizzando le modifiche
-tramite un LLM quando non viene trovato alcun riferimento esplicito (pattern `#123`).
+Optionally auto-creates an issue by summarizing the commit via an LLM when no explicit
+reference is found (pattern `#123`).
 """
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class GitHubClient:
 
     def get_pull_request(self, pr_number: int) -> dict:
         response = self._session.get(f"{self._base_url}/pulls/{pr_number}", timeout=30)
-        self._raise_for_status(response, "recupero dettagli della pull request")
+        self._raise_for_status(response, "fetching pull request details")
         return response.json()
 
     def update_pull_request_body(self, pr_number: int, body: str) -> None:
@@ -58,7 +58,7 @@ class GitHubClient:
             json={"body": body},
             timeout=30,
         )
-        self._raise_for_status(response, "aggiornamento della descrizione della pull request")
+        self._raise_for_status(response, "updating pull request description")
 
     def create_issue(self, title: str, body: str, labels: Optional[Sequence[str]] = None) -> int:
         payload = {"title": title, "body": body}
@@ -69,21 +69,19 @@ class GitHubClient:
             json=payload,
             timeout=30,
         )
-        self._raise_for_status(response, "creazione della issue")
+        self._raise_for_status(response, "creating issue")
         data = response.json()
         return data["number"]
 
     def find_recent_issue(self, title: str, window_days: int = 90) -> Optional[int]:
         cutoff = (datetime.utcnow() - timedelta(days=window_days)).date().isoformat()
-        query = (
-            f"repo:{self._repo} type:issue in:title \"{title}\" created:>={cutoff}"
-        )
+        query = f'repo:{self._repo} type:issue in:title "{title}" created:>={cutoff}'
         response = self._session.get(
             "https://api.github.com/search/issues",
             params={"q": query, "per_page": 5},
             timeout=30,
         )
-        self._raise_for_status(response, "ricerca di issue simili")
+        self._raise_for_status(response, "searching for similar issues")
         for item in response.json().get("items", []):
             if item.get("title", "").strip().lower() == title.strip().lower():
                 return int(item.get("number"))
@@ -98,7 +96,7 @@ class GitHubClient:
                 params={"per_page": 100, "page": page},
                 timeout=30,
             )
-            self._raise_for_status(response, "recupero dei commit della pull request")
+            self._raise_for_status(response, "fetching pull request commits")
             batch = response.json()
             if not batch:
                 break
@@ -116,7 +114,7 @@ class GitHubClient:
 
     def _fetch_commit_files(self, sha: str) -> Sequence[str]:
         response = self._session.get(f"{self._base_url}/commits/{sha}", timeout=30)
-        self._raise_for_status(response, "recupero dei file del commit")
+        self._raise_for_status(response, "fetching commit files")
         data = response.json()
         return [file_info["filename"] for file_info in data.get("files", [])]
 
@@ -124,11 +122,8 @@ class GitHubClient:
     def _raise_for_status(response: requests.Response, context: str) -> None:
         try:
             response.raise_for_status()
-        except requests.HTTPError as exc:  # pragma: no cover - logging helper
-            message = (
-                f"Errore durante il {context}. Stato {response.status_code}: "
-                f"{response.text}"
-            )
+        except requests.HTTPError as exc:  # pragma: no cover
+            message = f"Error while {context}. Status {response.status_code}: {response.text}"
             raise RuntimeError(message) from exc
 
 
@@ -136,18 +131,30 @@ def extract_issue_numbers(text: str) -> List[int]:
     return [int(match.group(1)) for match in ISSUE_PATTERN.finditer(text)]
 
 
-def summarise_with_llm(openai_api_key: Optional[str], message: str, files: Sequence[str], model: str) -> str:
-    """Genera una sintesi del commit usando un LLM.
+def _parse_llm_summary(text: str) -> Tuple[str, str]:
+    """Best-effort parser: first non-empty line is title; the rest is the paragraph."""
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    lines = [ln for ln in lines if ln]  # remove empty
+    if not lines:
+        return ("Update changes", "Summarize commit changes and impacted files.")
+    title = lines[0]
+    paragraph = " ".join(lines[1:]).strip()
+    if not paragraph:
+        paragraph = "Summarize commit changes and impacted files."
+    return title, paragraph
 
-    Se non è disponibile alcuna chiave API, viene utilizzata una sintesi euristica.
-    """
-    context = {
-        "message": message,
-        "files": list(files),
-    }
-    heuristic_summary = heuristic_commit_summary(context)
+
+def summarise_with_llm(
+    openai_api_key: Optional[str],
+    message: str,
+    files: Sequence[str],
+    model: str,
+) -> Tuple[str, str]:
+    """Generate an English commit summary (title + paragraph). Falls back to heuristics."""
+    context = {"message": message, "files": list(files)}
+    heuristic_title, heuristic_paragraph = heuristic_commit_summary(context)
     if not openai_api_key:
-        return heuristic_summary
+        return heuristic_title, heuristic_paragraph
 
     payload = {
         "model": model,
@@ -155,28 +162,29 @@ def summarise_with_llm(openai_api_key: Optional[str], message: str, files: Seque
             {
                 "role": "system",
                 "content": (
-                    "Sei un assistente che riassume commit software. "
-                    "Produci un titolo conciso (max 12 parole) e un paragrafo "
-                    "che descrive le modifiche principali."
+                    "You are an assistant that summarizes software commits. "
+                    "Respond in English. "
+                    "Output exactly: a concise title (max 12 words) on the first line, "
+                    "then one paragraph describing the main changes."
                 ),
             },
             {
                 "role": "user",
                 "content": textwrap.dedent(
                     f"""
-                    Riassumi il seguente commit:
+                    Summarize the following commit:
 
-                    Messaggio:
+                    Message:
                     {message}
 
-                    File coinvolti:
-                    {json.dumps(context['files'], ensure_ascii=False, indent=2)}
+                    Files involved:
+                    {json.dumps(context["files"], ensure_ascii=False, indent=2)}
                     """
                 ).strip(),
             },
         ],
         "temperature": 0.2,
-        "max_tokens": 300,
+        "max_tokens": 250,
     }
 
     try:
@@ -191,21 +199,34 @@ def summarise_with_llm(openai_api_key: Optional[str], message: str, files: Seque
         )
         response.raise_for_status()
         data = response.json()
-        summary = data["choices"][0]["message"]["content"].strip()
-        return summary or heuristic_summary
-    except Exception:  # pragma: no cover - best effort fallback
-        return heuristic_summary
+        raw = (data["choices"][0]["message"]["content"] or "").strip()
+        title, paragraph = _parse_llm_summary(raw)
+
+        # Safety trims
+        title = title[:120].strip()  # keep title reasonable, GitHub limit is large anyway
+        paragraph = paragraph.strip() or heuristic_paragraph
+        return title, paragraph
+    except Exception:  # pragma: no cover
+        return heuristic_title, heuristic_paragraph
 
 
-def heuristic_commit_summary(context: dict) -> str:
-    message = context["message"].splitlines()[0].strip()
+def heuristic_commit_summary(context: dict) -> Tuple[str, str]:
+    """English-ish fallback without a real translator."""
+    first_line = (context.get("message") or "").splitlines()[0].strip()
     files = context.get("files") or []
     if files:
         limited_files = ", ".join(files[:5])
         if len(files) > 5:
             limited_files += ", …"
-        return f"{message}. File principali: {limited_files}."
-    return message
+        title = (first_line[:60] or "Update changes").strip()
+        paragraph = (
+            f"Changes from commit message: {first_line}. "
+            f"Main files touched: {limited_files}."
+        )
+        return title, paragraph
+    title = (first_line[:60] or "Update changes").strip()
+    paragraph = f"Changes from commit message: {first_line}."
+    return title, paragraph
 
 
 def ensure_issue_links(
@@ -218,88 +239,84 @@ def ensure_issue_links(
 ) -> Tuple[bool, List[str]]:
     token = os.getenv("GITHUB_TOKEN")
     if not token:
-        raise RuntimeError("GITHUB_TOKEN non presente nell'ambiente.")
+        raise RuntimeError("GITHUB_TOKEN is not set in the environment.")
 
     client = GitHubClient(token, repo)
     commits = client.list_pull_request_commits(pr_number)
-    missing_commits: List[Commit] = []
-    for commit in commits:
-        if not extract_issue_numbers(commit.message):
-            missing_commits.append(commit)
+    missing_commits: List[Commit] = [c for c in commits if not extract_issue_numbers(c.message)]
 
     if not missing_commits:
-        return True, ["Tutti i commit sono associati a issue."]
+        return True, ["All commits are linked to at least one issue."]
 
     pr_data = client.get_pull_request(pr_number)
     pr_body = pr_data.get("body") or ""
 
-    log_messages: List[str] = []
     if not auto_create:
         missing_list = ", ".join(commit.short_sha for commit in missing_commits)
         message = (
-            "Commit senza riferimento a issue rilevati: "
-            f"{missing_list}. Aggiungere un riferimento del tipo #<numero>."
+            "Commits without an issue reference detected: "
+            f"{missing_list}. Please add a reference like #<number>."
         )
         return False, [message]
 
+    log_messages: List[str] = []
     for commit in missing_commits:
-        summary = summarise_with_llm(openai_api_key, commit.message, commit.files, openai_model)
-        title = commit.message.splitlines()[0][:70]
+        issue_title, summary_paragraph = summarise_with_llm(
+            openai_api_key, commit.message, commit.files, openai_model
+        )
+
+        # Ensure the issue title is not empty and not too long
+        issue_title = (issue_title or "Update changes").strip()[:120]
+
         body = textwrap.dedent(
             f"""
-            Issue generata automaticamente per il commit {commit.sha}.
+            Auto-generated issue for commit `{commit.sha}`.
 
-## Sintesi
-{summary}
+            ## Summary
+            {summary_paragraph}
 
-## Collegamenti
-- Commit: {commit.html_url}
+            ## Links
+            - Commit: {commit.html_url}
             """
         ).strip()
 
-        existing_issue = client.find_recent_issue(title)
+        existing_issue = client.find_recent_issue(issue_title)
         if existing_issue:
             issue_number = existing_issue
-            log_messages.append(
-                f"Riutilizzata issue #{issue_number} per il commit {commit.short_sha}."
-            )
+            log_messages.append(f"Reused issue #{issue_number} for commit {commit.short_sha}.")
         else:
-            issue_number = client.create_issue(title=title, body=body, labels=labels)
-            log_messages.append(
-                f"Creata issue #{issue_number} per il commit {commit.short_sha}."
-            )
+            issue_number = client.create_issue(title=issue_title, body=body, labels=labels)
+            log_messages.append(f"Created issue #{issue_number} for commit {commit.short_sha}.")
 
         bullet = f"- Closes #{issue_number} (commit {commit.short_sha})"
         if bullet not in pr_body:
             pr_body = (pr_body + "\n" + bullet).strip()
 
     client.update_pull_request_body(pr_number, pr_body)
-    log_messages.append("Aggiornata la descrizione della pull request con le issue generate.")
-    log_messages.append(
-        "Gli ID delle issue sono ora collegati nel corpo della pull request."
-    )
+    log_messages.append("Updated the pull request description with generated issues.")
+    log_messages.append("Issue IDs are now linked in the pull request body.")
     return True, log_messages
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", required=True, help="Repository nel formato <owner>/<name>.")
-    parser.add_argument("--pr-number", required=True, type=int, help="Numero della pull request.")
+    parser.add_argument("--repo", required=True, help="Repository in the form <owner>/<name>.")
+    parser.add_argument("--pr-number", required=True, type=int, help="Pull request number.")
     parser.add_argument(
         "--auto-create",
         action="store_true",
-        help="Crea automaticamente una issue quando non viene trovato alcun riferimento.",
+        help="Automatically create an issue when no reference is found.",
     )
     parser.add_argument(
         "--openai-model",
         default="gpt-4o-mini",
-        help="Modello da utilizzare per la generazione della sintesi (default: gpt-4o-mini).",
+        help="Model used to generate the summary (default: gpt-4o-mini).",
     )
     parser.add_argument(
         "--labels",
         nargs="*",
         default=["triage"],
-        help="Etichette da assegnare alle issue generate automaticamente.",
+        help="Labels to assign to auto-generated issues.",
     )
     return parser.parse_args(argv)
 
@@ -315,8 +332,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             openai_model=args.openai_model,
             labels=args.labels,
         )
-    except Exception as exc:  # pragma: no cover - CLI failure handling
-        print(f"Errore: {exc}", file=sys.stderr)
+    except Exception as exc:  # pragma: no cover
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     for message in messages:
