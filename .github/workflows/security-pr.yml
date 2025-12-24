@@ -181,13 +181,18 @@ jobs:
           set -euo pipefail
           mkdir -p "$REPORT_DIR"
 
-          # Restore coerente con la stessa configuration che userai in 'list'
+          # Restore forzato e coerente
           dotnet restore Momentum.sln -p:Configuration=Release --force-evaluate
 
-          dotnet list Momentum.sln package --vulnerable --include-transitive --configuration Release --format json \
+          # dotnet list NON supporta --configuration, usa proprietà MSBuild
+          dotnet list Momentum.sln package --vulnerable --include-transitive \
+            -p:Configuration=Release \
+            --format json \
             > "$REPORT_DIR/dotnet-packages.json" \
-            || dotnet list Momentum.sln package --vulnerable --include-transitive --configuration Release \
+          || dotnet list Momentum.sln package --vulnerable --include-transitive \
+            -p:Configuration=Release \
             > "$REPORT_DIR/dotnet-packages.txt"
+
 
 
       - name: Setup Java

@@ -31,7 +31,6 @@ services.Configure<IdentifierAuthorizationOptions>(configuration.GetSection("Ide
 
 services.AddDbContext<IdentifierDbContext>(options =>
 {
-    //TODO capire se mantenere in memory
     var cs = configuration.GetConnectionString("Identifier");
     //if (!string.IsNullOrWhiteSpace(cs))
     //{
