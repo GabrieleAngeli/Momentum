@@ -131,23 +131,29 @@ License evaluation ensures the license is currently valid and that the requested
 | GET    | `/api/identifier/flags/{flagKey}/evaluate`         | Returns variation and enabled flag precedence |
 | GET    | `/api/identifier/license/has-feature/{featureKey}` | Check if organization can access a feature.   |
 | POST   | `/api/identifier/seed`                             | Seed deterministic baseline data (config gated). |
+| POST   | `/identifier/events/seed`                          | Dapr pub/sub seed trigger (topic: `identifier.seed`). |
+| gRPC   | `IdentifierService`                                | gRPC API defined in `contracts/identifier/identifier.proto`. |
+
+> **Dapr note:** The seed event expects a pub/sub component named `identifier` (see `src/AppHost/mounts/dapr/components/`).
 
 ### Example requests
 
 ```bash
 # Authorize seeded admin user
-curl "http://localhost:5086/api/identifier/authorize" \
+curl "http://localhost:8082/api/identifier/authorize" \
   --get \
   --data-urlencode "userId=08fb1fb2-541d-4720-9f61-89d33bd44ddc" \
   --data-urlencode "resource=devices" \
   --data-urlencode "action=manage"
 
 # Evaluate flag precedence
-curl "http://localhost:5086/api/identifier/flags/ui.newDashboard/evaluate" \
+curl "http://localhost:8082/api/identifier/flags/ui.newDashboard/evaluate" \
   --get \
   --data-urlencode "orgId=3f7b5937-5e63-4d0e-8267-29aef39915af" \
   --data-urlencode "userId=08fb1fb2-541d-4720-9f61-89d33bd44ddc"
 ```
+
+> **Port note:** `docker-compose.yml` maps the Identifier API to `localhost:8082`. Aspire AppHost assigns dynamic ports; use the Aspire dashboard to discover the endpoint.
 
 ## Configuration
 
@@ -156,7 +162,7 @@ curl "http://localhost:5086/api/identifier/flags/ui.newDashboard/evaluate" \
 ```json
 {
   "ConnectionStrings": {
-    "Identifier": "Server=...;Database=Momentum.Identifier;..."
+    "Identifier": "Host=localhost;Port=55432;Database=momentum_test;Username=postgres;Password=postgres"
   },
   "Identifier": {
     "Authorization": {
@@ -171,9 +177,11 @@ curl "http://localhost:5086/api/identifier/flags/ui.newDashboard/evaluate" \
 
 Environment overrides:
 
-- `ConnectionStrings__Identifier` — database connection string (SQL Server).
-- `IDENTIFIER__SEED_ENABLED=true` — enable the seed endpoint without editing files.
+- `ConnectionStrings__Identifier` — database connection string (PostgreSQL/Timescale).
+- `Identifier__Seed__Enabled=true` or `IDENTIFIER__SEED_ENABLED=true` — enable the seed endpoint without editing files.
 - `Identifier__Integration__Enabled=true` — allow other services to delegate authorization decisions.
+
+> **Compose note:** `docker-compose.yml` does not inject `ConnectionStrings__Identifier`, so you must provide it (for example `Host=timescale;Port=5432;Database=momentum;Username=postgres;Password=postgres`) when running the container.
 
 ## Migrations & database update
 
@@ -198,13 +206,14 @@ DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 dotnet build Momentum.sln
 
 # run Identifier API
 cd src/services/identifier/Identifier.Api
+ConnectionStrings__Identifier="Host=localhost;Port=5432;Database=identifier_dev;Username=postgres;Password=postgres" \
 ASPNETCORE_ENVIRONMENT=Development dotnet run
 
 # execute tests
 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 dotnet test Momentum.sln --filter Identifier
 ```
 
-Integration tests use SQLite in-memory with automatic database creation. Unit tests rely on EF Core InMemory providers for deterministic behaviour.
+Integration tests use Testcontainers with Timescale/Postgres; unit tests rely on EF Core InMemory providers.
 
 ## Seed data
 
@@ -244,4 +253,3 @@ Seeds are idempotent and can be executed via the protected `/api/identifier/seed
 - Containerise Identifier.Api or include it in Aspire `AppHost` (register service with SQL Server dependency, health probes, optional Dapr components for configuration/secrets).
 - Export `swagger/v1/swagger.json` as part of CI artifacts for contract publishing.
 - CI should execute `dotnet build`, `dotnet test`, and `dotnet ef database update` against a transient database to validate migrations.
-
