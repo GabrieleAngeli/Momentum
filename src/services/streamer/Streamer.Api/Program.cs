@@ -28,6 +28,8 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
+// Test Dapr sidecar connection
+
 app.MapGrpcService<StreamerGrpcService>();
 app.MapGet("/", () => "Streamer service ready");
 app.MapHealthChecks("/healthz");
