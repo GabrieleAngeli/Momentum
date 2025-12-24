@@ -176,17 +176,19 @@ jobs:
 
       - name: Audit .NET packages
         if: matrix.language == 'dotnet'
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p "$REPORT_DIR"
 
-          # assicura che tutti i project.assets.json siano presenti e aggiornati
-          dotnet restore Momentum.sln
+          # Restore coerente con la stessa configuration che userai in 'list'
+          dotnet restore Momentum.sln -p:Configuration=Release --force-evaluate
 
-          # audit sulla solution (esplicito)
-          dotnet list Momentum.sln package --vulnerable --include-transitive --format json \
+          dotnet list Momentum.sln package --vulnerable --include-transitive --configuration Release --format json \
             > "$REPORT_DIR/dotnet-packages.json" \
-            || dotnet list Momentum.sln package --vulnerable --include-transitive \
+            || dotnet list Momentum.sln package --vulnerable --include-transitive --configuration Release \
             > "$REPORT_DIR/dotnet-packages.txt"
+
 
       - name: Setup Java
         if: startsWith(matrix.language, 'java-')
