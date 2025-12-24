@@ -11,11 +11,7 @@ on:
       release_channel:
         description: 'Select release channel'
         type: choice
-        options:
-          - alpha
-          - beta
-          - rc
-          - stable
+        options: [ alpha, beta, rc, stable ]
         default: alpha
 
 permissions:
@@ -24,7 +20,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-main
   cancel-in-progress: false
 
 jobs:
@@ -34,19 +30,44 @@ jobs:
 
     env:
       DOTNET_VERSION: '8.0.x'
-      NODE_VERSION: 20
+      NODE_VERSION: '20'
       SOLUTION: Momentum.sln
       WEB_DIR: src/web-core
       APPHOST_DIR: src/AppHost
       ARTIFACTS_DIR: artifacts
+      REPORT_DIR: reports
+      # Manuale: input. Automatico: vars.RELEASE_CHANNEL. Default: alpha.
       RELEASE_CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.release_channel) || vars.RELEASE_CHANNEL || 'alpha' }}
 
-
     steps:
-      - name: Checkout (full history)
+      - name: Checkout (full history, main)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main
+
+      # ---- AUTO MODE GUARD: esegui solo se questo push su main è legato a una PR (merge/squash/rebase) ----
+      - name: Detect if this push comes from a merged PR
+        id: prdetect
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Lista PR associate al commit (funziona anche per squash merge)
+          count=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "Accept: application/vnd.github.groot-preview+json" \
+            "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+            --jq 'length' || echo "0")
+          echo "prs_count=$count" >> "$GITHUB_OUTPUT"
+          echo "PRs linked to commit: $count"
+
+      - name: Skip release (push not coming from PR merge)
+        if: github.event_name == 'push' && steps.prdetect.outputs.prs_count == '0'
+        run: |
+          echo "This push is not associated with any PR. Skipping release."
+          exit 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -61,7 +82,8 @@ jobs:
       - name: Restore .NET
         run: dotnet restore ${{ env.SOLUTION }}
 
-      - name: Calculate next base version (from last stable)
+      # ---- 1) Calcola la NEXT_BASE da ultimo STABLE (vX.Y.Z) + conventional commits ----
+      - name: Calculate next base version (SemVer from Conventional Commits)
         id: semver
         shell: bash
         run: |
@@ -70,7 +92,7 @@ jobs:
           LAST_STABLE="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1 || true)"
           [[ -z "${LAST_STABLE}" ]] && LAST_STABLE="v0.1.0"
 
-          BASE="${LAST_STABLE#v}"   # X.Y.Z
+          BASE="${LAST_STABLE#v}"  # X.Y.Z
 
           COMMITS="$(git log --pretty=format:%s "${LAST_STABLE}..HEAD" || true)"
 
@@ -96,11 +118,11 @@ jobs:
 
           NEXT_BASE="${MA}.${MI}.${PA}"
 
-          echo "last_stable=${LAST_STABLE}"   >> "$GITHUB_OUTPUT"
-          echo "next_base=${NEXT_BASE}"       >> "$GITHUB_OUTPUT"
-          echo "bump=${BUMP}"                 >> "$GITHUB_OUTPUT"
+          echo "last_stable=${LAST_STABLE}" >> "$GITHUB_OUTPUT"
+          echo "next_base=${NEXT_BASE}"     >> "$GITHUB_OUTPUT"
+          echo "bump=${BUMP}"               >> "$GITHUB_OUTPUT"
 
-
+      # ---- 2) Determina BASE_VERSION del "ciclo" + tag_name coerente (alpha.0, alpha.1...) ----
       - name: Determine release channel metadata (cycle-based)
         id: release_meta
         shell: bash
@@ -110,96 +132,135 @@ jobs:
           LAST_STABLE: ${{ steps.semver.outputs.last_stable }}
         run: |
           set -euo pipefail
+
           CHANNEL="${INPUT_CHANNEL:-alpha}"
-          case "${CHANNEL}" in alpha|beta|rc|stable) ;; *) echo "Bad channel"; exit 1;; esac
+          case "${CHANNEL}" in alpha|beta|rc|stable) ;; *) echo "Unsupported RELEASE_CHANNEL '${CHANNEL}'" >&2; exit 1;; esac
 
           LAST_STABLE_BASE="${LAST_STABLE#v}"
 
-          # Se esiste un prerelease "attivo" (alpha/beta/rc) e non c'è ancora lo stable di quella base,
-          # continuiamo su quella base (base "pinnata").
-          LATEST_PRE="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-*' --sort=-creatordate \
-            | grep -E '-(alpha|beta|rc)\.' | head -n1 || true)"
+          # Trova l'ultima prerelease tra alpha/beta/rc (ordinata per versione)
+          LATEST_PRE="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-*' --sort=-version:refname \
+            | grep -E '\-(alpha|beta|rc)\.[0-9]+$' | head -n1 || true)"
 
           CYCLE_BASE=""
           if [[ -n "${LATEST_PRE}" ]]; then
             PRE_BASE="${LATEST_PRE#v}"
-            PRE_BASE="${PRE_BASE%%-*}"     # X.Y.Z
+            PRE_BASE="${PRE_BASE%%-*}"   # X.Y.Z
+            # Se non esiste ancora lo stable di quella base, il ciclo è "aperto": continua su PRE_BASE
             if [[ "${PRE_BASE}" != "${LAST_STABLE_BASE}" ]] && ! git rev-parse -q --verify "refs/tags/v${PRE_BASE}" >/dev/null; then
               CYCLE_BASE="${PRE_BASE}"
             fi
           fi
 
           BASE_VERSION="${CYCLE_BASE:-${NEXT_BASE}}"
+          [[ -z "${BASE_VERSION}" ]] && { echo "Missing base version" >&2; exit 1; }
 
-          # Numero prerelease: alpha.0, alpha.1... (per base+canale)
+          # Calcola prev_tag per compare
+          prev_stable() {
+            git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1 || true
+          }
+
+          # Pre-numero: vBASE-channel.N (parte da 0 per nuova base)
+          PRE_NUM=""
           if [[ "${CHANNEL}" == "stable" ]]; then
             TAG_NAME="v${BASE_VERSION}"
             IS_PRERELEASE="false"
             IS_LATEST="true"
             RELEASE_NAME="🚀 v${BASE_VERSION}"
-            PRE_NUM=""
+            PREV_TAG="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v "^v${BASE_VERSION}$" | head -n1 || true)"
           else
-            # calcola max N esistente su vBASE-channel.N
             max=-1
             while read -r t; do
               n="${t##*.}"
               [[ "${n}" =~ ^[0-9]+$ ]] || continue
               (( n > max )) && max=$n
-            done < <(git tag --list "v${BASE_VERSION}-${CHANNEL}.*" || true)
+            done < <(git tag --list "v${BASE_VERSION}-${CHANNEL}.*" --sort=version:refname || true)
+
             PRE_NUM=$((max+1))
             TAG_NAME="v${BASE_VERSION}-${CHANNEL}.${PRE_NUM}"
             IS_PRERELEASE="true"
             IS_LATEST="false"
             RELEASE_NAME="🚀 v${BASE_VERSION}-${CHANNEL}.${PRE_NUM}"
+
+            if [[ "${PRE_NUM}" -gt 0 ]]; then
+              PREV_TAG="v${BASE_VERSION}-${CHANNEL}.$((PRE_NUM-1))"
+            else
+              PREV_TAG="$(prev_stable)"
+            fi
           fi
 
-          echo "version_base=${BASE_VERSION}"   >> "$GITHUB_OUTPUT"
-          echo "tag_name=${TAG_NAME}"          >> "$GITHUB_OUTPUT"
-          echo "release_name=${RELEASE_NAME}"  >> "$GITHUB_OUTPUT"
-          echo "is_prerelease=${IS_PRERELEASE}">> "$GITHUB_OUTPUT"
-          echo "is_latest=${IS_LATEST}"        >> "$GITHUB_OUTPUT"
-          echo "pre_num=${PRE_NUM}"            >> "$GITHUB_OUTPUT"
+          [[ -z "${PREV_TAG}" ]] && PREV_TAG="${LAST_STABLE:-v0.1.0}"
 
+          REPO="${GITHUB_REPOSITORY}"
+          OWNER="${REPO%%/*}"
+          NAME="${REPO#*/}"
+          COMPARE_URL="https://github.com/${OWNER}/${NAME}/compare/${PREV_TAG}...${TAG_NAME}"
+
+          echo "release_channel=${CHANNEL}"   >> "$GITHUB_OUTPUT"
+          echo "version_base=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG_NAME}"         >> "$GITHUB_OUTPUT"
+          echo "release_name=${RELEASE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "is_latest=${IS_LATEST}"       >> "$GITHUB_OUTPUT"
+          echo "prev_tag=${PREV_TAG}"         >> "$GITHUB_OUTPUT"
+          echo "compare_url=${COMPARE_URL}"   >> "$GITHUB_OUTPUT"
+          echo "pre_num=${PRE_NUM}"           >> "$GITHUB_OUTPUT"
+
+      # ---- 3) Branch release sempre coerente (mai vuoto) ----
       - name: Create / update release branch
         env:
-          REL: ${{ steps.semver.outputs.release_branch }}
+          REL: release/v${{ steps.release_meta.outputs.version_base }}
         run: |
           set -euo pipefail
+          if [[ -z "${REL}" ]]; then
+            echo "REL is empty" >&2
+            exit 1
+          fi
+
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git fetch origin --prune
-          if git rev-parse --verify "$REL" >/dev/null 2>&1; then
-            git switch "$REL"
-            git reset --hard origin/main
+
+          if git show-ref --verify --quiet "refs/remotes/origin/${REL}"; then
+            git switch -C "${REL}" "origin/${REL}"
           else
-            git switch -c "$REL"
-            git reset --hard origin/main
+            git switch -c "${REL}"
           fi
-          git push --force-with-lease origin "$REL"
+
+          git reset --hard origin/main
+          git push --force-with-lease origin "${REL}"
 
       - name: Bump version in solution (best-effort)
         env:
           VERSION: ${{ steps.release_meta.outputs.version_base }}
+          REL: release/v${{ steps.release_meta.outputs.version_base }}
         run: |
           set -euo pipefail
+          git switch "${REL}"
+
           if [[ -f Directory.Build.props ]]; then
             sed -i -E "s|<Version>[^<]+</Version>|<Version>${VERSION}</Version>|" Directory.Build.props || true
           fi
+
           if [[ -f "${WEB_DIR}/package.json" ]]; then
             jq --arg v "${VERSION}" '.version=$v' "${WEB_DIR}/package.json" > "${WEB_DIR}/package.json.tmp" && mv "${WEB_DIR}/package.json.tmp" "${WEB_DIR}/package.json"
           fi
+
           if ! git diff --quiet; then
             git add -A
             git commit -m "chore(release): bump version to v${VERSION}"
-            git push origin "${{ steps.semver.outputs.release_branch }}"
+            git push origin "${REL}"
           fi
 
       - name: Build artifacts
         run: |
           set -euo pipefail
           mkdir -p "${ARTIFACTS_DIR}"
+
           dotnet restore "${SOLUTION}"
           dotnet build "${SOLUTION}" -c Release --no-restore
+
           if [[ -d "${APPHOST_DIR}" ]]; then
             OUT="${ARTIFACTS_DIR}/apphost-publish"
             dotnet publish "${APPHOST_DIR}" -c Release -o "${OUT}"
@@ -207,12 +268,13 @@ jobs:
               (cd "${ARTIFACTS_DIR}" && zip -rq apphost-publish.zip apphost-publish)
             fi
           fi
+
           if [[ -f "${WEB_DIR}/package.json" ]]; then
             npm ci --prefix "${WEB_DIR}"
             npm run build --prefix "${WEB_DIR}"
             DIST_ROOT="${WEB_DIR}/dist"
             if [[ -d "${DIST_ROOT}" ]]; then
-              CANDIDATE=$(find "${DIST_ROOT}" -type d -name browser -print -quit)
+              CANDIDATE=$(find "${DIST_ROOT}" -type d -name browser -print -quit || true)
               [[ -n "${CANDIDATE}" ]] && DIST_TO_ZIP="${CANDIDATE}" || DIST_TO_ZIP="${DIST_ROOT}"
               OUT_ZIP="${GITHUB_WORKSPACE}/${ARTIFACTS_DIR}/web-core-dist.zip"
               mkdir -p "$(dirname "${OUT_ZIP}")"
@@ -220,7 +282,6 @@ jobs:
             fi
           fi
 
-      # --- NOTE FINALI: generiamo markdown e lo salviamo sia in artifacts che in repo/main ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -228,6 +289,7 @@ jobs:
 
       - name: Install notes deps
         run: |
+          set -euo pipefail
           python -m pip install -U pip
           if [ -f tools/release_notes/requirements.txt ]; then
             pip install -r tools/release_notes/requirements.txt
@@ -252,23 +314,24 @@ jobs:
           TAG_NAME: ${{ steps.release_meta.outputs.tag_name }}
           PREV_TAG: ${{ steps.release_meta.outputs.prev_tag }}
           COMPARE_URL: ${{ steps.release_meta.outputs.compare_url }}
+          ARTIFACTS_DIR: ${{ env.ARTIFACTS_DIR }}
         run: |
           set -euo pipefail
           mkdir -p "${ARTIFACTS_DIR}" ReleaseNotes
+
           OUT_ART="${ARTIFACTS_DIR}/RELEASE_NOTES.md"
           OUT_REPO="ReleaseNotes/${TAG_NAME}.md"
           RAW_NOTES="${ARTIFACTS_DIR}/CHANGELOG_RAW.md"
-          export OUT_ART OUT_REPO RAW_NOTES
-          # NOTE: calcolate sull'intervallo last_tag -> HEAD per mantenere coerenza col tag su main
+
+          # NOTE: calcolate sull'intervallo prev_tag -> HEAD
           python tools/release_notes/generate_release_notes.py \
             --base "${PREV_TAG}" \
             --head "HEAD" \
             --version "${TAG_NAME}" \
             --out "${RAW_NOTES}"
+
           python - <<'PY'
-          import os
-          import re
-          import subprocess
+          import os, re, subprocess
           from pathlib import Path
 
           project_name = os.environ.get("PROJECT_NAME", "Momentum")
@@ -280,97 +343,85 @@ jobs:
           raw_notes_path = Path(os.environ["RAW_NOTES"])
           out_art = Path(os.environ["OUT_ART"])
           out_repo = Path(os.environ["OUT_REPO"])
-
           is_prerelease = os.environ.get("IS_PRERELEASE", "false")
+
           commit_range = f"{prev_tag}..HEAD"
           fmt = "%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e"
           try:
-              log_out = subprocess.check_output([
-                  "git",
-                  "log",
-                  commit_range,
-                  f"--pretty=format:{fmt}",
-                  "--date=short",
-              ], text=True)
+            log_out = subprocess.check_output(
+              ["git","log",commit_range,f"--pretty=format:{fmt}","--date=short"], text=True
+            )
           except subprocess.CalledProcessError:
-              log_out = ""
+            log_out = ""
 
           entries = []
           if log_out:
-              for rec in log_out.split("\x1e"):
-                  rec = rec.strip()
-                  if not rec:
-                      continue
-                  parts = rec.split("\x1f")
-                  if len(parts) < 5:
-                      continue
-                  sha, author, date, subject, body = parts[:5]
-                  subject = subject.strip()
-                  body = (body or "").strip()
-                  entries.append({
-                      "sha": sha,
-                      "author": author,
-                      "date": date,
-                      "subject": subject,
-                      "body": body,
-                  })
+            for rec in log_out.split("\x1e"):
+              rec = rec.strip()
+              if not rec:
+                continue
+              parts = rec.split("\x1f")
+              if len(parts) < 5:
+                continue
+              sha, author, date, subject, body = parts[:5]
+              entries.append({
+                "sha": sha, "author": author, "date": date,
+                "subject": subject.strip(), "body": (body or "").strip()
+              })
 
           conv_re = re.compile(r"^(?P<type>[a-zA-Z]+)(?:\((?P<scope>[^)]+)\))?(?P<bang>!)?:\s*(?P<msg>.+)$")
 
           def classify(commit):
-              m = conv_re.match(commit["subject"])
-              ctype = m.group("type").lower() if m else "other"
-              scope = m.group("scope") if m else None
-              msg = m.group("msg") if m else commit["subject"]
-              breaking = bool(m and m.group("bang")) or "BREAKING CHANGE" in commit["body"]
-              return ctype, scope, msg.strip(), breaking
+            m = conv_re.match(commit["subject"])
+            ctype = m.group("type").lower() if m else "other"
+            scope = m.group("scope") if m else None
+            msg = m.group("msg") if m else commit["subject"]
+            breaking = bool(m and m.group("bang")) or ("BREAKING CHANGE" in commit["body"])
+            return ctype, scope, msg.strip(), breaking
 
           def format_line(commit, scope, msg):
-              prefix = f"**{scope}**: " if scope else ""
-              return f"- {prefix}{msg} ({commit['sha'][:7]}) by {commit['author']}"
+            prefix = f"**{scope}**: " if scope else ""
+            return f"- {prefix}{msg} ({commit['sha'][:7]}) by {commit['author']}"
 
-          highlights = []
-          changes = []
-          fixes = []
-          breaking = []
+          highlights, changes, fixes, breaking = [], [], [], []
 
           for commit in entries:
-              ctype, scope, msg, breaking_flag = classify(commit)
-              line = format_line(commit, scope, msg)
-              if ctype == "feat":
-                  if len(highlights) < 5:
-                      highlights.append(line)
-                  changes.append(line)
-              elif ctype == "fix":
-                  fixes.append(line)
-              else:
-                  changes.append(line)
-              if breaking_flag:
-                  breaking.append(line)
+            ctype, scope, msg, breaking_flag = classify(commit)
+            line = format_line(commit, scope, msg)
+            if ctype == "feat":
+              if len(highlights) < 5:
+                highlights.append(line)
+              changes.append(line)
+            elif ctype == "fix":
+              fixes.append(line)
+            else:
+              changes.append(line)
+            if breaking_flag:
+              breaking.append(line)
 
           def ensure_content(lines):
-              return lines if lines else ["- _No entries recorded._"]
+            return lines if lines else ["- _No entries recorded._"]
 
           header = [
-              f"# {project_name} — {release_name}",
-              f"Channel: {channel}",
-              f"Prerelease: {is_prerelease}",
-              f"Commit range: {prev_tag}..{tag_name}",
-              "",
+            f"# {project_name} — {release_name}",
+            f"Channel: {channel}",
+            f"Prerelease: {is_prerelease}",
+            f"Commit range: {prev_tag}..{tag_name}",
+            "",
           ]
 
           section_map = [
-              ("Highlights", ensure_content(highlights)),
-              ("Changes", ensure_content(changes)),
-              ("Fixes", ensure_content(fixes)),
-              ("Breaking changes", ensure_content(breaking)),
+            ("Highlights", ensure_content(highlights)),
+            ("Changes", ensure_content(changes)),
+            ("Fixes", ensure_content(fixes)),
+            ("Breaking changes", ensure_content(breaking)),
           ]
 
           body_lines = []
           for title, lines in section_map:
-              body_lines.append(f"## {title}")
-              body_lines.extend(lines)
-              body_lines.append("")
+            body_lines.append(f"## {title}")
+            body_lines.extend(lines)
+            body_lines.append("")
 
           body_lines.append("## Changelog diff")
           body_lines.append(compare_url)
@@ -378,19 +429,20 @@ jobs:
 
           raw_appendix = []
           if raw_notes_path.exists():
-              raw_text = raw_notes_path.read_text(encoding="utf-8").strip()
-              if raw_text:
-                  raw_appendix.append("---")
-                  raw_appendix.append("## Detailed changelog")
-                  raw_appendix.append("")
-                  raw_appendix.append(raw_text)
+            raw_text = raw_notes_path.read_text(encoding="utf-8").strip()
+            if raw_text:
+              raw_appendix += ["---", "## Detailed changelog", "", raw_text]
 
           final_text = "\n".join(header + body_lines + raw_appendix).rstrip() + "\n"
           out_art.write_text(final_text, encoding="utf-8")
           out_repo.write_text(final_text, encoding="utf-8")
           PY
-                    echo "artifacts_file=${OUT_ART}" >> "$GITHUB_OUTPUT"
-                    echo "repo_file=${OUT_REPO}" >> "$GITHUB_OUTPUT"
+
+          echo "artifacts_file=${OUT_ART}" >> "$GITHUB_OUTPUT"
+          echo "repo_file=${OUT_REPO}" >> "$GITHUB_OUTPUT"
+          echo "RAW_NOTES=${RAW_NOTES}" >> "$GITHUB_ENV"
+          echo "OUT_ART=${OUT_ART}" >> "$GITHUB_ENV"
+          echo "OUT_REPO=${OUT_REPO}" >> "$GITHUB_ENV"
 
       - name: Commit release notes on main
         env:
@@ -399,9 +451,11 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git fetch origin --prune
           git switch main
           git pull --ff-only origin main || true
+
           git add "${FILE}"
           if ! git diff --cached --quiet; then
             git commit -m "docs(release): add ${FILE} [skip ci]"
@@ -410,7 +464,6 @@ jobs:
             echo "Release notes già presenti su main, nessun commit."
           fi
 
-      # --- Tag e Release su MAIN ---
       - name: Create tag on main
         env:
           TAG: ${{ steps.release_meta.outputs.tag_name }}
@@ -419,7 +472,7 @@ jobs:
           git fetch origin --prune
           MAIN_SHA="$(git rev-parse origin/main)"
           git tag -a "${TAG}" "${MAIN_SHA}" -m "Release ${TAG}" || true
-          git push origin "${TAG}"
+          git push origin "${TAG}" || true
 
       - name: Create GitHub Release (draft) on main
         uses: softprops/action-gh-release@v2
@@ -444,7 +497,6 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const tag = ${{ toJSON(steps.release_meta.outputs.tag_name) }};
-            // poll finché la release è visibile
             let rel = null;
             for (let i = 0; i < 10; i++) {
               try {
@@ -465,6 +517,6 @@ jobs:
       - name: Upload CI artifacts (for debugging)
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts-${{ steps.semver.outputs.new_version }}
+          name: release-artifacts-${{ steps.release_meta.outputs.version_base }}
           path: artifacts
           if-no-files-found: ignore
