@@ -29,7 +29,7 @@
     <PackageVersion Include="Grpc.Tools" Version="2.64.0" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Npgsql" Version="9.0.4" />
-    <PackageVersion Include="FluentAssertions " Version="8.8.0" />
+    <PackageVersion Include="FluentAssertions" Version="8.8.0" />
 
 
     <PackageVersion Include="OpenFeature" Version="$(OpenFeatureVersion)" />
@@ -65,7 +65,7 @@
     <!-- ASP.NET Core / BCL -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.20" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.20" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.ApiExplorer " Version="2.3.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.ApiExplorer" Version="2.3.0" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Core" Version="1.2.0" />
